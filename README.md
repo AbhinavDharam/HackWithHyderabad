@@ -1,4 +1,8 @@
-# ⚡ RecallOps
+<p align="center">
+  <img src="assets/logo.png" alt="RecallOps Logo" width="220" />
+</p>
+
+# RecallOps
 
 > **AI Incident Response Assistant with Persistent SRE Organizational Memory**  
 > *Built for Hack with Hyderabad 3.0 — Powered by Hindsight (Vectorize)*

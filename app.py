@@ -15,6 +15,7 @@ from recallops.llm.llm_client import LLMClient
 # Page Configuration
 st.set_page_config(
     page_title="RecallOps — Incident Response Engine",
+    page_icon="assets/logo.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -120,7 +121,7 @@ mem_adapter, inc_manager, agent, llm = get_adapters()
 
 # Sidebar: Operational Controls & Memory Health
 with st.sidebar:
-    st.markdown("### RecallOps")
+    st.image("assets/logo.png", use_container_width=True)
     st.caption("Operational Incident Memory Engine")
     st.markdown("---")
 
