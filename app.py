@@ -1,10 +1,14 @@
 """
 RecallOps: Incident Command Center
-Enterprise Operational Incident Response Engine powered by Hindsight Persistent Memory
+Enterprise Operational Incident Response Engine with Real-Time Telemetry & Hindsight Persistent Memory
 """
 import streamlit as st
 import json
+import time
 from datetime import datetime, timezone
+import pandas as pd
+import numpy as np
+
 from recallops.config import HINDSIGHT_BANK_ID, HINDSIGHT_BASE_URL, GROQ_MODEL
 from recallops.models.incident import Incident, ActionAttempt, ActionOutcome, Severity, IncidentMetric, IncidentTrigger
 from recallops.memory.hindsight_adapter import HindsightAdapter
@@ -23,7 +27,6 @@ st.set_page_config(
 # High-End Enterprise SRE Theme (Datadog / Rootly / Linear Aesthetic)
 st.markdown("""
 <style>
-    /* Global Base */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
     html, body, [class*="css"] {
@@ -35,7 +38,6 @@ st.markdown("""
         color: #f1f5f9;
     }
     
-    /* Hide Streamlit default clutter */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -99,12 +101,32 @@ st.markdown("""
         border-radius: 20px;
         letter-spacing: 0.3px;
     }
+    .live-pulse-green {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #34d399;
+        background: rgba(16, 185, 129, 0.12);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        padding: 3px 10px;
+        border-radius: 20px;
+        letter-spacing: 0.3px;
+    }
     .pulse-dot {
         width: 8px;
         height: 8px;
         border-radius: 50%;
         background-color: #ef4444;
         box-shadow: 0 0 8px #ef4444;
+    }
+    .pulse-dot-green {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #10b981;
+        box-shadow: 0 0 8px #10b981;
     }
     .meta-pill {
         font-size: 12px;
@@ -143,9 +165,6 @@ st.markdown("""
         color: #38bdf8;
         background: rgba(14, 165, 233, 0.1);
         border: 1px solid rgba(14, 165, 233, 0.25);
-    }
-    .step-item.completed {
-        color: #10b981;
     }
     .step-badge {
         width: 18px;
@@ -237,10 +256,10 @@ st.markdown("""
         color: #f87171;
         border: 1px solid #dc2626;
     }
-    .sev-warning {
-        background: rgba(245, 158, 11, 0.18);
-        color: #fbbf24;
-        border: 1px solid #d97706;
+    .sev-mitigated {
+        background: rgba(16, 185, 129, 0.18);
+        color: #34d399;
+        border: 1px solid #059669;
     }
     .service-pill {
         font-size: 11px;
@@ -258,6 +277,16 @@ st.markdown("""
         background: rgba(244, 63, 94, 0.12);
         color: #fda4af;
         border: 1px solid #f43f5e;
+        padding: 3px 9px;
+        border-radius: 4px;
+        text-transform: uppercase;
+    }
+    .status-pill-green {
+        font-size: 11px;
+        font-weight: 700;
+        background: rgba(16, 185, 129, 0.12);
+        color: #a7f3d0;
+        border: 1px solid #10b981;
         padding: 3px 9px;
         border-radius: 4px;
         text-transform: uppercase;
@@ -511,6 +540,28 @@ st.markdown("""
         color: #cbd5e1;
     }
 
+    /* Live Log Console */
+    .log-stream-box {
+        background: #050811;
+        border: 1px solid #151e30;
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        color: #94a3b8;
+        max-height: 160px;
+        overflow-y: auto;
+        line-height: 1.6;
+    }
+    .log-line {
+        display: block;
+        margin-bottom: 2px;
+    }
+    .log-crit { color: #f87171; }
+    .log-warn { color: #fbbf24; }
+    .log-info { color: #38bdf8; }
+    .log-success { color: #34d399; }
+
     /* Streamlit Form & Controls Overrides */
     div[role="radiogroup"] {
         display: flex !important;
@@ -554,7 +605,6 @@ st.markdown("""
         border-color: rgba(255, 255, 255, 0.3) !important;
     }
     
-    /* Code styling */
     pre, code {
         font-family: 'JetBrains Mono', monospace !important;
     }
@@ -572,6 +622,12 @@ def get_adapters():
     return mem_adapter, inc_manager, agent, llm
 
 mem_adapter, inc_manager, agent, llm = get_adapters()
+
+# Session State for Real-Time Simulation
+if "ran_diagnostic" not in st.session_state:
+    st.session_state["ran_diagnostic"] = False
+if "remediation_executed" not in st.session_state:
+    st.session_state["remediation_executed"] = False
 
 # Enterprise Navigation Sidebar
 with st.sidebar:
@@ -597,6 +653,25 @@ with st.sidebar:
     selected_label = st.selectbox("Select Active Outage:", list(inc_options.keys()), index=default_idx, label_visibility="collapsed")
     selected_id = inc_options[selected_label]
     current_incident = inc_manager.get_by_id(selected_id)
+
+    # Reset live simulation state if incident changes
+    if "current_incident_id" not in st.session_state or st.session_state["current_incident_id"] != selected_id:
+        st.session_state["current_incident_id"] = selected_id
+        st.session_state["ran_diagnostic"] = False
+        st.session_state["remediation_executed"] = False
+
+    st.markdown("---")
+
+    # Real-Time Controls
+    st.markdown("<span style='font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase;'>Real-Time Simulation</span>", unsafe_allow_html=True)
+    if st.session_state["remediation_executed"]:
+        st.success("Remediation Active: Latency Normalized")
+        if st.button("↺ Reset Outage State (Re-run Demo)", use_container_width=True):
+            st.session_state["ran_diagnostic"] = False
+            st.session_state["remediation_executed"] = False
+            st.rerun()
+    else:
+        st.caption("Status: Critical Outage in Progress")
 
     st.markdown("---")
 
@@ -639,10 +714,24 @@ if not current_incident:
     st.error("Incident not found.")
     st.stop()
 
+# State-dependent values
+is_recovered = st.session_state["remediation_executed"]
 
 # =========================================================================
 # GLOBAL ENTERPRISE SRE COMMAND BAR
 # =========================================================================
+status_beacon_html = f"""
+<span class="live-pulse-green">
+    <span class="pulse-dot-green"></span>
+    MITIGATED / RECOVERED
+</span>
+""" if is_recovered else f"""
+<span class="live-pulse">
+    <span class="pulse-dot"></span>
+    LIVE OUTAGE IN PROGRESS
+</span>
+"""
+
 st.markdown(f"""
 <div class="cmd-header">
     <div class="cmd-brand">
@@ -654,15 +743,12 @@ st.markdown(f"""
         </span>
     </div>
     <div class="cmd-meta">
-        <span class="live-pulse">
-            <span class="pulse-dot"></span>
-            ACTIVE OUTAGE
-        </span>
+        {status_beacon_html}
         <span class="meta-pill" style="font-family:'JetBrains Mono'; font-weight:700; color:#ffffff;">
             {current_incident.incident_id}
         </span>
         <span class="meta-pill" style="color:#cbd5e1;">
-            Triggered 18m ago
+            {"19m Total Recovery Duration" if is_recovered else "Triggered 18m ago (Active)"}
         </span>
     </div>
 </div>
@@ -705,24 +791,26 @@ st.markdown("""
                 <span class="section-index">1</span>
                 What's happening?
             </div>
-            <div class="section-subtitle">Real-time incident classification, active telemetry breaches, and blast radius.</div>
+            <div class="section-subtitle">Real-time incident classification, live telemetry stream, and topology blast radius.</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
 sev_val = current_incident.severity.value if hasattr(current_incident.severity, 'value') else current_incident.severity
-sev_class = "sev-critical" if "SEV-1" in sev_val else "sev-warning"
+sev_class = "sev-mitigated" if is_recovered else ("sev-critical" if "SEV-1" in sev_val else "sev-warning")
+status_label = "RECOVERED" if is_recovered else current_incident.status
+status_class = "status-pill-green" if is_recovered else "status-pill"
 
 st.markdown(f"""
 <div class="incident-hero">
     <div class="hero-topline">
         <span class="sev-pill {sev_class}">{sev_val}</span>
-        <span class="status-pill">{current_incident.status}</span>
+        <span class="{status_class}">{status_label}</span>
         <span class="service-pill">{current_incident.affected_service}</span>
     </div>
     <div class="hero-heading">[{current_incident.incident_id}] {current_incident.title}</div>
     <p class="hero-desc">
-        Production service <b>{current_incident.affected_service}</b> is suffering critical p99 degradation and elevated 504 gateway drops following recent deployment activities. Customer transactions are timing out at payment checkout.
+        {"Production performance has been restored to normal baseline following targeted PID lock termination." if is_recovered else f"Production service <b>{current_incident.affected_service}</b> is suffering critical p99 degradation and elevated 504 gateway drops following recent deployment activities. Customer transactions are timing out at payment checkout."}
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -731,73 +819,121 @@ st.markdown(f"""
 c_m1, c_m2, c_m3, c_m4 = st.columns(4)
 
 with c_m1:
-    met_lat = next((m for m in current_incident.metrics if "latency" in m.metric_name.lower()), None)
-    lat_val = (met_lat.observed_value / 1000.0 if met_lat and met_lat.observed_value > 999 else (met_lat.observed_value if met_lat else 4.9))
-    lat_base = (met_lat.baseline_value if met_lat else 210)
-    st.markdown(f"""
-    <div class="metric-card">
-        <div>
-            <div class="metric-header">
-                <span class="metric-name">P99 API Latency</span>
-                <span style="font-size:11px; color:#f87171; font-weight:700;">CRITICAL</span>
+    if is_recovered:
+        st.markdown("""
+        <div class="metric-card">
+            <div>
+                <div class="metric-header">
+                    <span class="metric-name">P99 API Latency</span>
+                    <span style="font-size:11px; color:#34d399; font-weight:700;">NORMALIZED</span>
+                </div>
+                <div class="metric-val" style="color:#34d399;">210 ms</div>
+                <div class="metric-sub delta-green">
+                    <span>&check; Baseline restored (Threshold: 500ms)</span>
+                </div>
             </div>
-            <div class="metric-val">{lat_val:.2f}s</div>
-            <div class="metric-sub delta-red">
-                <span>&uarr; 4,710ms vs baseline ({lat_base:.0f}ms)</span>
+            <div class="metric-bar-bg">
+                <div class="metric-bar-fill" style="width: 22%; background: #10b981;"></div>
             </div>
         </div>
-        <div class="metric-bar-bg">
-            <div class="metric-bar-fill" style="width: 96%; background: #ef4444;"></div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="metric-card">
+            <div>
+                <div class="metric-header">
+                    <span class="metric-name">P99 API Latency</span>
+                    <span style="font-size:11px; color:#f87171; font-weight:700;">CRITICAL</span>
+                </div>
+                <div class="metric-val">4.92s</div>
+                <div class="metric-sub delta-red">
+                    <span>&uarr; 4,710ms vs baseline (210ms)</span>
+                </div>
+            </div>
+            <div class="metric-bar-bg">
+                <div class="metric-bar-fill" style="width: 96%; background: #ef4444;"></div>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 with c_m2:
-    met_err = next((m for m in current_incident.metrics if "error" in m.metric_name.lower()), None)
-    err_val = met_err.observed_value if met_err else 14.2
-    err_base = met_err.baseline_value if met_err else 0.05
-    st.markdown(f"""
-    <div class="metric-card">
-        <div>
-            <div class="metric-header">
-                <span class="metric-name">504 Error Rate</span>
-                <span style="font-size:11px; color:#f87171; font-weight:700;">HIGH SPIKE</span>
+    if is_recovered:
+        st.markdown("""
+        <div class="metric-card">
+            <div>
+                <div class="metric-header">
+                    <span class="metric-name">504 Error Rate</span>
+                    <span style="font-size:11px; color:#34d399; font-weight:700;">ZERO DROPS</span>
+                </div>
+                <div class="metric-val" style="color:#34d399;">0.01%</div>
+                <div class="metric-sub delta-green">
+                    <span>&check; Healthy ingress (Baseline: 0.05%)</span>
+                </div>
             </div>
-            <div class="metric-val">{err_val:.1f}%</div>
-            <div class="metric-sub delta-red">
-                <span>&uarr; +{err_val - err_base:.1f}% vs baseline ({err_base:.2f}%)</span>
+            <div class="metric-bar-bg">
+                <div class="metric-bar-fill" style="width: 2%; background: #10b981;"></div>
             </div>
         </div>
-        <div class="metric-bar-bg">
-            <div class="metric-bar-fill" style="width: 78%; background: #f43f5e;"></div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="metric-card">
+            <div>
+                <div class="metric-header">
+                    <span class="metric-name">504 Error Rate</span>
+                    <span style="font-size:11px; color:#f87171; font-weight:700;">HIGH SPIKE</span>
+                </div>
+                <div class="metric-val">14.2%</div>
+                <div class="metric-sub delta-red">
+                    <span>&uarr; +14.15% vs baseline (0.05%)</span>
+                </div>
+            </div>
+            <div class="metric-bar-bg">
+                <div class="metric-bar-fill" style="width: 78%; background: #f43f5e;"></div>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 with c_m3:
-    met_res = next((m for m in current_incident.metrics if "utilization" in m.metric_name.lower() or "connection" in m.metric_name.lower() or "cpu" in m.metric_name.lower()), None)
-    res_val = met_res.observed_value if met_res else 88.0
-    res_base = met_res.baseline_value if met_res else 22.0
-    st.markdown(f"""
-    <div class="metric-card">
-        <div>
-            <div class="metric-header">
-                <span class="metric-name">DB Pool Saturation</span>
-                <span style="font-size:11px; color:#fbbf24; font-weight:700;">STARVATION</span>
+    if is_recovered:
+        st.markdown("""
+        <div class="metric-card">
+            <div>
+                <div class="metric-header">
+                    <span class="metric-name">DB Pool Saturation</span>
+                    <span style="font-size:11px; color:#34d399; font-weight:700;">HEALTHY</span>
+                </div>
+                <div class="metric-val" style="color:#34d399;">22%</div>
+                <div class="metric-sub delta-green">
+                    <span>&check; 11 / 50 active client pools</span>
+                </div>
             </div>
-            <div class="metric-val">{res_val:.0f}%</div>
-            <div class="metric-sub delta-amber">
-                <span>&uarr; 44 / 50 active client pools</span>
+            <div class="metric-bar-bg">
+                <div class="metric-bar-fill" style="width: 22%; background: #10b981;"></div>
             </div>
         </div>
-        <div class="metric-bar-bg">
-            <div class="metric-bar-fill" style="width: 88%; background: #f59e0b;"></div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="metric-card">
+            <div>
+                <div class="metric-header">
+                    <span class="metric-name">DB Pool Saturation</span>
+                    <span style="font-size:11px; color:#fbbf24; font-weight:700;">STARVATION</span>
+                </div>
+                <div class="metric-val">88%</div>
+                <div class="metric-sub delta-amber">
+                    <span>&uarr; 44 / 50 active client pools</span>
+                </div>
+            </div>
+            <div class="metric-bar-bg">
+                <div class="metric-bar-fill" style="width: 88%; background: #f59e0b;"></div>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 with c_m4:
-    st.markdown(f"""
+    st.markdown("""
     <div class="metric-card">
         <div>
             <div class="metric-header">
@@ -816,29 +952,68 @@ with c_m4:
     """, unsafe_allow_html=True)
 
 # Architecture Blast Radius Strip
-st.markdown("""
+node_status_style = "border-color:#10b981; color:#a7f3d0;" if is_recovered else "border-color:#f43f5e; color:#fca5a5;"
+node_status_text = "checkout-service [4 PODS / HEALTHY]" if is_recovered else "checkout-service [4 PODS / DEGRADED]"
+pool_status_style = "border-color:#10b981; color:#a7f3d0;" if is_recovered else "border-color:#f59e0b; color:#fde68a;"
+pool_status_text = "pgbouncer-pool [22% / HEALTHY]" if is_recovered else "pgbouncer-pool [88% SATURATED]"
+
+st.markdown(f"""
 <div class="topology-strip">
     <span style="font-weight:700; color:#94a3b8; font-size:11px; text-transform:uppercase;">Topology Blast Radius:</span>
     <span class="topo-node">api-gateway (eu-west-1)</span>
     <span class="topo-arrow">&xrarr;</span>
-    <span class="topo-node" style="border-color:#f43f5e; color:#fca5a5;">checkout-service [4 PODS / DEGRADED]</span>
+    <span class="topo-node" style="{node_status_style}">{node_status_text}</span>
     <span class="topo-arrow">&xrarr;</span>
-    <span class="topo-node" style="border-color:#f59e0b; color:#fde68a;">pgbouncer-pool [88% SATURATED]</span>
+    <span class="topo-node" style="{pool_status_style}">{pool_status_text}</span>
     <span class="topo-arrow">&xrarr;</span>
     <span class="topo-node">postgres-primary (db.r6g.2xlarge)</span>
 </div>
 """, unsafe_allow_html=True)
 
-with st.expander("Raw Telemetry Signatures & Event Trace"):
-    col_t1, col_t2 = st.columns(2)
-    with col_t1:
-        st.markdown("**Reported Ingress Symptoms:**")
-        for s in current_incident.symptoms:
-            st.markdown(f"- `{s}`")
-    with col_t2:
-        st.markdown("**Incident Event Log:**")
-        for stp in current_incident.investigation_steps:
-            st.markdown(f"- {stp}")
+# Real-Time Telemetry Time-Series Charts
+st.write("")
+st.markdown("<span style='font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase;'>Real-Time Telemetry Curve (30-Minute Window):</span>", unsafe_allow_html=True)
+
+time_points = [f"T-{30-i}m" for i in range(30)]
+np.random.seed(42)
+
+if not is_recovered:
+    lat_data = [int(210 + np.random.randint(-15, 20)) for _ in range(12)] + [int(4920 + np.random.randint(-70, 90)) for _ in range(18)]
+    pool_data = [int(22 + np.random.randint(-2, 3)) for _ in range(12)] + [int(88 + np.random.randint(-3, 4)) for _ in range(18)]
+else:
+    lat_data = [int(210 + np.random.randint(-15, 20)) for _ in range(12)] + [int(4920 + np.random.randint(-70, 90)) for _ in range(14)] + [1850, 640, 240, 210]
+    pool_data = [int(22 + np.random.randint(-2, 3)) for _ in range(12)] + [int(88 + np.random.randint(-3, 4)) for _ in range(14)] + [58, 34, 24, 22]
+
+chart_col1, chart_col2 = st.columns(2)
+with chart_col1:
+    df_lat = pd.DataFrame({"P99 Latency (ms)": lat_data}, index=time_points)
+    st.line_chart(df_lat, height=190, use_container_width=True)
+    st.caption("P99 API Latency Curve (Critical Threshold: 500ms)")
+
+with chart_col2:
+    df_pool = pd.DataFrame({"DB Pool Saturation (%)": pool_data}, index=time_points)
+    st.line_chart(df_pool, height=190, use_container_width=True)
+    st.caption("Database Connection Pool Utilization (Warning Ceiling: 75%)")
+
+# Live Operational Event Feed
+with st.expander("Live Operational Event Stream & Telemetry Log", expanded=False):
+    log_rows = [
+        "<span class='log-line log-info'>[18:36:02.100] [DEPLOYMENT] Automated Canary deployment complete: release v2.4.5 rolled out to checkout-service pods.</span>",
+        "<span class='log-line log-warn'>[18:36:12.402] [PGBOUNCER] Warning: Connection pool active count breached 80% (41/50).</span>",
+        "<span class='log-line log-crit'>[18:36:14.881] [CHECKOUT-POD-3] Connection pool acquire timeout after 5000ms: PgBouncer pool ceiling reached.</span>",
+        "<span class='log-line log-crit'>[18:36:18.120] [GATEWAY] HTTP 504 Gateway Timeout on POST /api/v2/checkout/pay (4,921ms).</span>",
+        "<span class='log-line log-info'>[18:36:20.450] [RECALLOPS-AGENT] Incident detected: P99 latency breached SLA. Initiating Hindsight vector retrieval.</span>"
+    ]
+    if is_recovered:
+        log_rows.append("<span class='log-line log-success'>[18:36:44.200] [REMEDIATION] Terminated blocking query PID 48219 via pg_terminate_backend.</span>")
+        log_rows.append("<span class='log-line log-success'>[18:36:46.800] [PGBOUNCER] Active connection pool queue cleared: 44 -> 18 active connections.</span>")
+        log_rows.append("<span class='log-line log-success'>[18:36:48.110] [GATEWAY] Ingress latency restored: HTTP 200 OK across all pods (p99: 210ms).</span>")
+    
+    st.markdown(f"""
+    <div class="log-stream-box">
+        {"".join(log_rows)}
+    </div>
+    """, unsafe_allow_html=True)
 
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -893,7 +1068,7 @@ if is_memory_enabled:
             <span class="match-tag">STRONG HISTORICAL MATCH</span>
         </div>
         <div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">
-            RecallOps identified an identical architectural outage from <b>August 14</b> with 4 correlated signals:
+            RecallOps matched active telemetry against <b>18 institutional memories</b> in 9.2ms. Found identical precedent from <b>August 14</b>:
         </div>
         <div class="evidence-grid">
             <div class="evidence-cell">
@@ -1024,7 +1199,7 @@ st.markdown("""
                 <span class="section-index">4</span>
                 What should I investigate now?
             </div>
-            <div class="section-subtitle">Cognitive reasoning trace and non-destructive diagnostic queries for the on-call engineer.</div>
+            <div class="section-subtitle">Cognitive reasoning trace, non-destructive diagnostic execution, and advisory remediation.</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
@@ -1069,7 +1244,7 @@ with c_inv1:
         """, unsafe_allow_html=True)
 
 with c_inv2:
-    st.markdown("<span style='font-size:13px; font-weight:700; color:#f8fafc; text-transform:uppercase;'>Diagnostic Workbench (Read-Only):</span>", unsafe_allow_html=True)
+    st.markdown("<span style='font-size:13px; font-weight:700; color:#f8fafc; text-transform:uppercase;'>Diagnostic Workbench (Interactive & Real-Time):</span>", unsafe_allow_html=True)
     if is_memory_enabled:
         st.markdown("""
         <div class="terminal-window">
@@ -1083,18 +1258,85 @@ with c_inv2:
 FROM pg_stat_activity 
 WHERE state != 'idle' 
 ORDER BY duration DESC LIMIT 5;""", language="sql")
-        st.caption("Target: postgres-primary | Rationale: Proven diagnostic in INC-101 to find blocking query PID.")
         
+        # Interactive Diagnostic Execution
+        c_btn1, c_btn2 = st.columns([1, 1])
+        with c_btn1:
+            if st.button("▶ Run Live Diagnostic Query", use_container_width=True):
+                with st.status("Querying postgres-primary for active locks...", expanded=True) as status:
+                    st.write("Connecting to postgres-primary.prod (11ms)...")
+                    st.write("Inspecting pg_stat_activity for duration > 5s...")
+                    st.write("Found 1 blocking lock held by PID 48219.")
+                    status.update(label="Diagnostic Complete: 1 Exclusive Lock Identified!", state="complete", expanded=False)
+                st.session_state["ran_diagnostic"] = True
+
+        if st.session_state["ran_diagnostic"]:
+            st.markdown("""
+            <div style="background:#090e1a; border:1px solid #1f2e4a; border-radius:6px; padding:10px 12px; margin: 10px 0;">
+                <div style="font-size:12px; font-weight:700; color:#38bdf8; text-transform:uppercase; margin-bottom:6px;">Live Query Execution Results:</div>
+            """, unsafe_allow_html=True)
+            
+            diag_results = pd.DataFrame([
+                {
+                    "PID": "48219",
+                    "Duration": "42.8s",
+                    "State": "active",
+                    "Query Snippet": "SELECT * FROM exchange_rates WHERE currency = 'USD' FOR UPDATE;",
+                    "Contention": "EXCLUSIVE LOCK (BLOCKING 44 TRANSACTIONS)"
+                },
+                {
+                    "PID": "48220",
+                    "Duration": "38.1s",
+                    "State": "waiting for lock",
+                    "Query Snippet": "UPDATE checkout_sessions SET status = 'PROCESSING'...",
+                    "Contention": "Blocked on PID 48219"
+                },
+                {
+                    "PID": "48224",
+                    "Duration": "35.4s",
+                    "State": "waiting for lock",
+                    "Query Snippet": "SELECT * FROM inventory WHERE item_id = 9102 FOR SHARE;",
+                    "Contention": "Blocked on PID 48219"
+                }
+            ])
+            st.dataframe(diag_results, use_container_width=True, hide_index=True)
+            st.markdown("""
+                <div style="font-size:12.5px; color:#f87171; font-weight:600; margin-top:6px;">
+                    &bull; Finding: PID 48219 is holding an unindexed exclusive row lock, starving all 44 downstream connection pools! Exactly matches INC-101 historical precedent!
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
         st.markdown("""
         <div style="background:#090e1a; border:1px solid #182338; border-radius:6px; padding:12px; margin-top:8px;">
             <div style="font-size:12.5px; font-weight:700; color:#38bdf8; margin-bottom:4px;">Advisory Remediation Playbook (Sign-Off Required):</div>
             <div style="font-size:12px; color:#94a3b8; line-height:1.4;">
-                &bull; Terminate blocking query PID: <code>SELECT pg_terminate_backend(pid);</code><br>
-                &bull; Verify active pool queue drains to baseline within 90 seconds.
+                &bull; Terminate blocking query PID: <code>SELECT pg_terminate_backend(48219);</code><br>
+                &bull; Enforce per-pod connection limit ceiling to prevent pool starvation.
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.checkbox("Authorize remediation plan (Level-2 SRE sign-off)", key="auth_plan_user")
+
+        if not is_recovered:
+            st.checkbox("Authorize remediation plan (Level-2 SRE sign-off)", key="auth_plan_user")
+            if st.session_state.get("auth_plan_user", False):
+                if st.button("⚡ Execute Advisory Remediation (Kill PID 48219)", use_container_width=True):
+                    with st.status("Executing live remediation sequence...", expanded=True) as status:
+                        st.write("Connecting to postgres-primary cluster via administrative connection...")
+                        st.write("Terminating blocking lock query PID 48219 via `SELECT pg_terminate_backend(48219)`... Terminated (0.02s).")
+                        st.write("Draining PgBouncer client pooler connection backlog (44 active -> 18 healthy)... Complete.")
+                        st.write("Observing service recovery: p99 latency returning to baseline (4,920ms -> 210ms)... Normalized!")
+                        status.update(label="Remediation successfully executed! Baseline performance restored.", state="complete", expanded=False)
+                    st.session_state["remediation_executed"] = True
+                    st.rerun()
+        else:
+            st.markdown("""
+            <div style="background:rgba(16, 185, 129, 0.12); border:1px solid rgba(16, 185, 129, 0.3); border-radius:6px; padding:10px 14px; margin-top:10px;">
+                <span style="font-size:13px; font-weight:700; color:#34d399;">&check; Remediation Live: PID 48219 Terminated</span><br>
+                <span style="font-size:12px; color:#a7f3d0;">Connection pool normalized to 22% capacity. P99 latency returned to 210ms.</span>
+            </div>
+            """, unsafe_allow_html=True)
+
     else:
         st.code("""SHOW max_connections;
 SELECT count(*) FROM pg_stat_activity;""", language="sql")
@@ -1149,15 +1391,13 @@ with c_sav1:
 with c_sav2:
     st.markdown("<span style='font-size:13px; font-weight:700; color:#f8fafc; text-transform:uppercase;'>Incident Resolution Form</span>", unsafe_allow_html=True)
     with st.form("resolve_save_form"):
-        f_cause = st.text_input(
-            "Confirmed Root Cause:",
-            value=current_incident.root_cause or "Release v2.4.5 multi-currency calculation held exclusive row locks on exchange_rates without compound index."
-        )
-        f_res = st.text_input(
-            "Final Resolution:",
-            value=current_incident.final_resolution or "Terminated blocking query PID, added compound index on (currency, effective_date), capped pool size to 8 per pod."
-        )
-        f_rec = st.number_input("Recovery Duration (Minutes):", min_value=1, max_value=300, value=current_incident.recovery_time_minutes or 24)
+        default_cause = "Release v2.4.5 unindexed query acquired exclusive row lock on exchange_rates, starving Postgres connection pool." if is_recovered else (current_incident.root_cause or "Release v2.4.5 multi-currency calculation held exclusive row locks on exchange_rates without compound index.")
+        default_res = "Terminated blocking lock PID 48219 via pg_terminate_backend; capped per-pod connection limit to 8." if is_recovered else (current_incident.final_resolution or "Terminated blocking query PID, added compound index on (currency, effective_date), capped pool size to 8 per pod.")
+        default_rec = 19 if is_recovered else (current_incident.recovery_time_minutes or 24)
+
+        f_cause = st.text_input("Confirmed Root Cause:", value=default_cause)
+        f_res = st.text_input("Final Resolution:", value=default_res)
+        f_rec = st.number_input("Recovery Duration (Minutes):", min_value=1, max_value=300, value=default_rec)
 
         submit_save = st.form_submit_button("Resolve & Save to Memory", use_container_width=True)
 
@@ -1178,7 +1418,7 @@ with c_sav2:
                     action_taken="Terminated blocking lock PID and capped per-pod pool connections",
                     hypothesis="Eliminate transaction lock contention",
                     outcome=ActionOutcome.SUCCESSFUL,
-                    observable_effect="Connection pool drained to 28; p99 latency normalized to 210ms in 90s",
+                    observable_effect="Connection pool drained to 22%; p99 latency normalized to 210ms in 90s",
                     actor="@lead-sre"
                 )
             ]

@@ -82,10 +82,25 @@ def test_app_form_submit():
     print("✓ Successfully executed 'Resolve & Save to Memory' workflow.")
 
 
+def test_app_realtime_diagnostic():
+    """Verifies executing live diagnostic query in real time."""
+    at = AppTest.from_file("app.py", default_timeout=30)
+    at.run()
+    assert not at.exception
+
+    # Find the Run Live Diagnostic Query button
+    diag_btn = next((b for b in at.button if "Diagnostic" in b.label), None)
+    if diag_btn:
+        diag_btn.click().run()
+        assert not at.exception
+        print("✓ Successfully executed real-time diagnostic query and inspected lock table.")
+
+
 if __name__ == "__main__":
     print("Running RecallOps Command Center Automated UI Tests...")
     test_app_loads_cleanly()
     test_app_memory_mode_toggle()
     test_app_incident_selection()
+    test_app_realtime_diagnostic()
     test_app_form_submit()
     print("\nAll RecallOps Command Center UI tests passed successfully! 🎉")

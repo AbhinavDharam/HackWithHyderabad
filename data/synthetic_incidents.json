@@ -55,54 +55,33 @@
     ],
     "actions_attempted": [
       {
-        "action_id": "ACT-101-1",
-        "timestamp": "2026-09-14T10:22:00Z",
-        "action_taken": "Scaled checkout-service Kubernetes deployment from 4 pods to 12 pods",
-        "hypothesis": "Assumed pod CPU throttling under traffic surge; more replicas would distribute load",
+        "action_id": "ACT-INC-101-1",
+        "timestamp": "2026-09-29T13:05:54Z",
+        "action_taken": "Scaled pod deployment replicas",
+        "hypothesis": "Distribute CPU load",
         "outcome": "FAILED",
-        "observable_effect": "Each new pod opened 25 database connections; overwhelmed PgBouncer, caused connection resets, latency increased to 8200ms",
-        "actor": "@oncall-devops"
+        "observable_effect": "Exhausted database connection pool; worsened latency to 8.2s",
+        "actor": "@oncall-engineer"
       },
       {
-        "action_id": "ACT-101-2",
-        "timestamp": "2026-09-14T10:30:00Z",
-        "action_taken": "Increased ingress timeout from 5000ms to 15000ms",
-        "hypothesis": "Give slow checkout requests more time to finish without throwing 504 errors",
-        "outcome": "INEFFECTIVE",
-        "observable_effect": "Requests simply piled up longer; thread pool on gateway exhausted, spreading latency to unrelated endpoints",
-        "actor": "@oncall-devops"
-      },
-      {
-        "action_id": "ACT-101-3",
-        "timestamp": "2026-09-14T10:42:00Z",
-        "action_taken": "Executed SELECT pg_terminate_backend(89104) and throttled coupon cron job",
-        "hypothesis": "Terminate runaway unindexed table scan holding exclusive row locks",
+        "action_id": "ACT-INC-101-2",
+        "timestamp": "2026-09-29T13:05:54Z",
+        "action_taken": "Terminated blocking lock PID and capped per-pod pool connections",
+        "hypothesis": "Eliminate transaction lock contention",
         "outcome": "SUCCESSFUL",
-        "observable_effect": "Active connection queue drained from 100 to 28; p99 latency returned to 210ms within 90 seconds",
-        "actor": "@lead-sre"
-      },
-      {
-        "action_id": "ACT-101-4",
-        "timestamp": "2026-09-14T10:50:00Z",
-        "action_taken": "Scaled pods back to 4 and set max_connections per pod to 8 in checkout-service config",
-        "hypothesis": "Cap connection footprint per pod to prevent future database connection pool starvation",
-        "outcome": "SUCCESSFUL",
-        "observable_effect": "Database connection ceiling maintained at 32 connections under full traffic",
+        "observable_effect": "Connection pool drained to 28; p99 latency normalized to 210ms in 90s",
         "actor": "@lead-sre"
       }
     ],
     "root_cause": "Release v2.4.1 introduced SELECT * FROM user_coupons WHERE code = $1 FOR UPDATE without an index on 'code'. Under concurrent checkouts, queries ran full sequential table scans and held row locks for >4500ms, completely saturating the PostgreSQL connection pool.",
     "final_resolution": "Terminated blocking query PID 89104, scaled down extraneous pods, added compound index on (code, user_id), and enforced a 3s statement_timeout in the PostgreSQL connection string.",
-    "recovery_time_minutes": 47,
+    "recovery_time_minutes": 40,
     "lessons_learned": [
-      "CRITICAL ANTI-PATTERN: Never scale out application pods when database connection pool is saturated; extra pods exacerbate pool starvation.",
-      "Always inspect pg_stat_activity with wait_event_type = 'Lock' before restarting or scaling services.",
-      "Enforce statement_timeout = 3000ms at the pooler level to auto-abort runaway queries before they starve the pool."
+      "Never scale out pods during database connection pool saturation.",
+      "Enforce statement_timeout on all currency calculation queries.",
+      "Add compound index on table row locks before deployment."
     ],
-    "runbook_recommendations": [
-      "Run: SELECT pid, now() - query_start AS duration, query, state FROM pg_stat_activity WHERE state != 'idle' ORDER BY duration DESC LIMIT 5;",
-      "Check PgBouncer active clients vs pool size in Grafana dashboard 'Postgres Core Pooler'."
-    ]
+    "runbook_recommendations": []
   },
   {
     "incident_id": "INC-102",
@@ -395,7 +374,7 @@
     "actions_attempted": [
       {
         "action_id": "ACT-INC-105-1",
-        "timestamp": "2026-09-29T12:59:11Z",
+        "timestamp": "2026-09-29T13:10:52Z",
         "action_taken": "Scaled pod deployment replicas",
         "hypothesis": "Distribute CPU load",
         "outcome": "FAILED",
@@ -404,11 +383,11 @@
       },
       {
         "action_id": "ACT-INC-105-2",
-        "timestamp": "2026-09-29T12:59:11Z",
+        "timestamp": "2026-09-29T13:10:52Z",
         "action_taken": "Terminated blocking lock PID and capped per-pod pool connections",
         "hypothesis": "Eliminate transaction lock contention",
         "outcome": "SUCCESSFUL",
-        "observable_effect": "Connection pool drained to 28; p99 latency normalized to 210ms in 90s",
+        "observable_effect": "Connection pool drained to 22%; p99 latency normalized to 210ms in 90s",
         "actor": "@lead-sre"
       }
     ],
