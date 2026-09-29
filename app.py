@@ -533,6 +533,34 @@ st.markdown("""
         padding: 8px 14px !important;
         transition: all 0.2s ease !important;
     }
+
+    /* Dropdown Non-Editable Styling & Pointer Cursor */
+    div[data-baseweb="select"] {
+        cursor: pointer !important;
+    }
+    div[data-baseweb="select"] * {
+        cursor: pointer !important;
+    }
+    div[data-baseweb="select"] input {
+        cursor: pointer !important;
+        caret-color: transparent !important;
+        pointer-events: none !important;
+        user-select: none !important;
+    }
+
+    /* Search Bar Styling */
+    div[data-testid="stTextInput"] input {
+        background-color: #0f172a !important;
+        border: 1px solid #1e293b !important;
+        color: #f1f5f9 !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        padding: 7px 12px !important;
+    }
+    div[data-testid="stTextInput"] input:focus {
+        border-color: #38bdf8 !important;
+        box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2) !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -551,28 +579,39 @@ mem_adapter, inc_manager, agent, llm = get_adapters()
 # Session State Management
 if "nav_tab" not in st.session_state:
     st.session_state["nav_tab"] = "Overview"
+if "selected_incident_id" not in st.session_state:
+    st.session_state["selected_incident_id"] = "INC-105"
 if "ran_diagnostic" not in st.session_state:
     st.session_state["ran_diagnostic"] = False
 if "remediation_executed" not in st.session_state:
     st.session_state["remediation_executed"] = False
 
-# Sidebar - Minimal Logo + Brand Text + Navigation Tabs
+# Sidebar - High-Visibility Illuminated Logo + Brand Text + Navigation Tabs
 with st.sidebar:
-    c_logo, c_brand = st.columns([1, 4])
-    with c_logo:
-        st.image("assets/logo.png", width=36)
-    with c_brand:
-        st.markdown("<div style='font-size:20px; font-weight:800; color:#fff; margin-top:2px;'>RecallOps</div>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:11.5px; color:#64748b; margin-top:-10px; margin-bottom:16px;'>Operational Incident Memory</div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #162032;">
+        <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, #0284c7 0%, #6366f1 100%); display:flex; align-items:center; justify-content:center; box-shadow:0 0 16px rgba(56,189,248,0.45); border:1.5px solid rgba(255,255,255,0.25); flex-shrink:0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a9 9 0 0 1 9 9c0 3.87-2.45 7.17-5.91 8.36L12 22l-3.09-2.64A9.002 9.002 0 0 1 3 11a9 9 0 0 1 9-9z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+                <path d="M12 13v4"></path>
+            </svg>
+        </div>
+        <div>
+            <div style="font-size:20px; font-weight:800; color:#ffffff; letter-spacing:-0.5px; line-height:1.15;">RecallOps</div>
+            <div style="font-size:11px; font-weight:600; color:#38bdf8; letter-spacing:0.5px; text-transform:uppercase;">Incident Intelligence</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Clean Navigation Menu Buttons
+    # Clean Navigation Menu Buttons (No Emojis)
     nav_items = [
-        ("Overview", "🏠 Overview"),
-        ("Incidents", "📑 Incidents"),
-        ("Memory", "🗄️ Memory"),
-        ("Investigate", "🔍 Investigate"),
-        ("Resolution", "✓ Resolution"),
-        ("Settings", "⚙️ Settings"),
+        ("Overview", "Overview"),
+        ("Incidents", "Incidents"),
+        ("Memory", "Memory"),
+        ("Investigate", "Investigate"),
+        ("Resolution", "Resolution"),
+        ("Settings", "Settings"),
     ]
 
     for key, label in nav_items:
@@ -598,7 +637,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🗄️ View Memory →", key="view_mem_sidebar", use_container_width=True):
+    if st.button("View Memory →", key="view_mem_sidebar", use_container_width=True):
         st.session_state["nav_tab"] = "Memory"
         st.rerun()
 
@@ -609,19 +648,19 @@ inc_options = {f"[{i.incident_id}] {i.title}": i.incident_id for i in all_incide
 
 default_idx = 0
 for idx, (label, iid) in enumerate(inc_options.items()):
-    if iid == "INC-105":
+    if iid == st.session_state.get("selected_incident_id", "INC-105"):
         default_idx = idx
         break
 
 col_srch, col_ctrls = st.columns([1.8, 2.2])
 
 with col_srch:
-    st.markdown("""
-    <div class="search-mockup">
-        <span>🔍</span>
-        <span>Search incidents, services, or ask RecallOps...</span>
-    </div>
-    """, unsafe_allow_html=True)
+    search_query = st.text_input(
+        "Search command center",
+        placeholder="Search incidents, services, symptoms, or root causes...",
+        label_visibility="collapsed",
+        key="top_search_query"
+    )
 
 with col_ctrls:
     c_env, c_bell, c_inc = st.columns([1, 0.4, 2])
@@ -633,8 +672,12 @@ with col_ctrls:
         """, unsafe_allow_html=True)
     with c_bell:
         st.markdown("""
-        <div class="bell-icon">
-            🔔<span class="bell-dot"></span>
+        <div class="bell-icon" title="No active alert disruptions">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span class="bell-dot"></span>
         </div>
         """, unsafe_allow_html=True)
     with c_inc:
@@ -642,12 +685,63 @@ with col_ctrls:
             "Active Incident",
             list(inc_options.keys()),
             index=default_idx,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key="incident_selector_box"
         )
         selected_id = inc_options[selected_label]
-        current_incident = inc_manager.get_by_id(selected_id)
+        st.session_state["selected_incident_id"] = selected_id
+        current_incident = inc_manager.get_by_id(selected_id) or all_incidents[0]
 
 is_recovered = st.session_state["remediation_executed"]
+
+# Live Search Query Overlay if Search Input is Active
+if search_query and search_query.strip():
+    q = search_query.strip().lower()
+    matches = [
+        i for i in all_incidents
+        if q in i.incident_id.lower()
+        or q in i.title.lower()
+        or q in i.affected_service.lower()
+        or (i.root_cause and q in i.root_cause.lower())
+        or any(q in s.lower() for s in i.symptoms)
+        or any(q in c.lower() for c in i.affected_components)
+    ]
+    st.markdown(f"""
+    <div style="background:#0b1120; border:1px solid #1e293b; border-left:4px solid #38bdf8; border-radius:8px; padding:16px; margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+                <span style="font-size:14px; font-weight:700; color:#ffffff;">Search Results: </span>
+                <span style="font-size:14px; font-weight:600; color:#38bdf8;">"{search_query}"</span>
+                <span style="font-size:12px; color:#94a3b8; margin-left:8px;">({len(matches)} matching incident{'s' if len(matches) != 1 else ''})</span>
+            </div>
+            <div style="font-size:12px; color:#64748b;">Instant Query</div>
+        </div>
+    """, unsafe_allow_html=True)
+    if matches:
+        for m in matches:
+            c_m1, c_m2 = st.columns([3.5, 1])
+            with c_m1:
+                st.markdown(f"""
+                <div style="background:#070b14; border:1px solid #162032; border-radius:6px; padding:10px 14px; margin-bottom:8px;">
+                    <div style="font-size:13px; font-weight:700; color:#ffffff;">
+                        <span style="color:#38bdf8;">[{m.incident_id}]</span> {m.title}
+                        <span style="background:#1e293b; color:#cbd5e1; font-size:11px; padding:2px 6px; border-radius:4px; margin-left:8px;">{m.affected_service}</span>
+                        <span style="background:{'rgba(239,68,68,0.2)' if 'SEV-1' in m.severity else 'rgba(245,158,11,0.2)'}; color:{'#f87171' if 'SEV-1' in m.severity else '#fbbf24'}; font-size:11px; padding:2px 6px; border-radius:4px; margin-left:4px;">{m.severity.split()[0]}</span>
+                        <span style="background:{'rgba(16,185,129,0.2)' if m.status == 'RESOLVED' else 'rgba(239,68,68,0.2)'}; color:{'#34d399' if m.status == 'RESOLVED' else '#f87171'}; font-size:11px; padding:2px 6px; border-radius:4px; margin-left:4px;">{m.status}</span>
+                    </div>
+                    <div style="font-size:12px; color:#94a3b8; margin-top:4px;">
+                        <b>Root Cause:</b> {m.root_cause or 'Under active investigation'}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with c_m2:
+                if st.button(f"Inspect {m.incident_id} →", key=f"btn_srch_{m.incident_id}", use_container_width=True):
+                    st.session_state["selected_incident_id"] = m.incident_id
+                    st.session_state["nav_tab"] = "Overview"
+                    st.rerun()
+    else:
+        st.markdown("<div style='font-size:12.5px; color:#94a3b8; padding:8px 0;'>No incidents match this query. Try keywords like <code>postgres</code>, <code>redis</code>, <code>checkout</code>, <code>gateway</code>, <code>webhook</code>, or <code>504</code>.</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # =========================================================================
@@ -680,7 +774,7 @@ if st.session_state["nav_tab"] == "Overview":
             <span class="tag-sev1">{"RESOLVED" if is_recovered else "SEV-1"}</span>
             <span class="tag-service">{current_incident.affected_service}</span>
             <span class="tag-neutral">Production</span>
-            <span class="tag-neutral">🕒 14 min ago</span>
+            <span class="tag-neutral">14 min ago</span>
         </div>
         <p class="hero-desc-text">
             {"Production checkout-service requests have normalized following targeted lock remediation." if is_recovered else f"Production {current_incident.affected_service} requests are experiencing high latency and 504 timeouts following release v2.4.5."}
@@ -696,14 +790,14 @@ if st.session_state["nav_tab"] == "Overview":
             st.markdown(f"""
             <div class="metric-grid-card">
                 <div class="metric-topline">
-                    <span class="metric-icon-square icon-red">📈</span>
+                    <span class="metric-icon-square icon-red" style="font-size:10px; font-weight:700;">LAT</span>
                     <span class="metric-title-label">P99 Latency</span>
                 </div>
                 <div class="metric-main-value" style="color:{'#34d399' if is_recovered else '#ffffff'};">
                     {'210 ms' if is_recovered else '4.9 s'}
                 </div>
                 <div class="metric-baseline-delta {'delta-green-text' if is_recovered else 'delta-red-text'}">
-                    {'✓ Normal baseline' if is_recovered else '↑ 4.7 s vs baseline'}
+                    {'Normal baseline' if is_recovered else '↑ 4.7 s vs baseline'}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -711,14 +805,14 @@ if st.session_state["nav_tab"] == "Overview":
             st.markdown(f"""
             <div class="metric-grid-card">
                 <div class="metric-topline">
-                    <span class="metric-icon-square icon-red">⚠️</span>
+                    <span class="metric-icon-square icon-red" style="font-size:10px; font-weight:700;">ERR</span>
                     <span class="metric-title-label">Error Rate</span>
                 </div>
                 <div class="metric-main-value" style="color:{'#34d399' if is_recovered else '#ffffff'};">
                     {'0.01 %' if is_recovered else '19.8 %'}
                 </div>
                 <div class="metric-baseline-delta {'delta-green-text' if is_recovered else 'delta-red-text'}">
-                    {'✓ Healthy ingress' if is_recovered else '↑ 19.7 % vs baseline'}
+                    {'Healthy ingress' if is_recovered else '↑ 19.7 % vs baseline'}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -726,14 +820,14 @@ if st.session_state["nav_tab"] == "Overview":
             st.markdown(f"""
             <div class="metric-grid-card">
                 <div class="metric-topline">
-                    <span class="metric-icon-square icon-purple">🗄️</span>
+                    <span class="metric-icon-square icon-purple" style="font-size:10px; font-weight:700;">DB</span>
                     <span class="metric-title-label">DB Connections</span>
                 </div>
                 <div class="metric-main-value" style="color:{'#34d399' if is_recovered else '#ffffff'};">
                     {'22 %' if is_recovered else '88 %'}
                 </div>
                 <div class="metric-baseline-delta {'delta-green-text' if is_recovered else 'delta-red-text'}">
-                    {'✓ Drained pool' if is_recovered else '↑ 58 % vs baseline'}
+                    {'Drained pool' if is_recovered else '↑ 58 % vs baseline'}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -741,7 +835,7 @@ if st.session_state["nav_tab"] == "Overview":
             st.markdown("""
             <div class="metric-grid-card">
                 <div class="metric-topline">
-                    <span class="metric-icon-square icon-blue">💻</span>
+                    <span class="metric-icon-square icon-blue" style="font-size:10px; font-weight:700;">REL</span>
                     <span class="metric-title-label">Recent Change</span>
                 </div>
                 <div class="metric-main-value" style="font-size:16px; color:#38bdf8; margin:6px 0;">
@@ -770,7 +864,7 @@ if st.session_state["nav_tab"] == "Overview":
             <div class="workflow-sub">Follow the workflow to resolve this incident using your team's memory.</div>
         </div>
         <div style="font-size:11.5px; color:#64748b; background:#0f172a; border:1px solid #1e293b; padding:4px 10px; border-radius:4px;">
-            ⚡ Interactive Flow
+            Interactive Flow
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -917,21 +1011,21 @@ if st.session_state["nav_tab"] == "Overview":
             </div>
             <div class="mem-stat-grid">
                 <div class="mem-stat-tile">
-                    <span class="mem-tile-icon" style="background:rgba(56,189,248,0.15); color:#38bdf8;">🗄️</span>
+                    <span class="mem-tile-icon" style="background:rgba(56,189,248,0.15); color:#38bdf8; font-size:10px; font-weight:800;">MEM</span>
                     <div>
                         <div class="mem-tile-val">{stats['total_memories']}</div>
                         <div class="mem-tile-lbl">Incidents remembered</div>
                     </div>
                 </div>
                 <div class="mem-stat-tile">
-                    <span class="mem-tile-icon" style="background:rgba(245,158,11,0.15); color:#fbbf24;">📖</span>
+                    <span class="mem-tile-icon" style="background:rgba(245,158,11,0.15); color:#fbbf24; font-size:10px; font-weight:800;">ACT</span>
                     <div>
                         <div class="mem-tile-val">{stats['action_experiences']}</div>
                         <div class="mem-tile-lbl">Action outcomes</div>
                     </div>
                 </div>
                 <div class="mem-stat-tile">
-                    <span class="mem-tile-icon" style="background:rgba(16,185,129,0.15); color:#34d399;">📄</span>
+                    <span class="mem-tile-icon" style="background:rgba(16,185,129,0.15); color:#34d399; font-size:10px; font-weight:800;">RUN</span>
                     <div>
                         <div class="mem-tile-val">{stats['lessons_and_antipatterns']}</div>
                         <div class="mem-tile-lbl">Runbook patterns</div>
@@ -948,7 +1042,7 @@ if st.session_state["nav_tab"] == "Overview":
                 </div>
             </div>
             <div class="smarter-card">
-                <span style="font-size:18px;">📈</span>
+                <span style="font-size:11px; font-weight:800; color:#38bdf8; background:#0f172a; padding:4px 6px; border-radius:4px;">EVOLVE</span>
                 <div style="font-size:12px; color:#cbd5e1;">
                     <b style="color:#38bdf8;">Getting smarter over time:</b> Each resolved incident helps RecallOps provide more relevant and accurate guidance.
                 </div>
@@ -1116,7 +1210,7 @@ elif st.session_state["nav_tab"] == "Investigate":
         with c_lrn1:
             st.markdown("""
             <div style="background:rgba(225,29,72,0.06); border:1px solid rgba(225,29,72,0.25); border-left:4px solid #e11d48; border-radius:8px; padding:14px;">
-                <div style="color:#f87171; font-weight:700; font-size:13px; margin-bottom:8px;">❌ What Failed (Anti-Patterns — Do Not Repeat)</div>
+                <div style="color:#f87171; font-weight:700; font-size:13px; margin-bottom:8px;">What Failed: Anti-Patterns (Do Not Repeat)</div>
                 <div style="font-size:12.5px; color:#fecdd3; line-height:1.45;">
                     &bull; <b>Scaled pods from 4 to 12:</b> Each pod opened 25 DB connections, crashing PgBouncer and spiking p99 latency to <b>8.2s</b>.<br>
                     &bull; <b>Increased gateway timeout:</b> Requests queued up, starving upstream thread pools.
@@ -1126,7 +1220,7 @@ elif st.session_state["nav_tab"] == "Investigate":
         with c_lrn2:
             st.markdown("""
             <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); border-left:4px solid #10b981; border-radius:8px; padding:14px;">
-                <div style="color:#34d399; font-weight:700; font-size:13px; margin-bottom:8px;">✓ What Worked & Root Cause</div>
+                <div style="color:#34d399; font-weight:700; font-size:13px; margin-bottom:8px;">What Worked: Root Cause & Resolution</div>
                 <div style="font-size:12.5px; color:#a7f3d0; line-height:1.45;">
                     &bull; <b>Terminated blocking lock PID:</b> Active pool queue drained from 100 to 28; p99 latency returned to <b>210ms in 90 seconds</b>.<br>
                     &bull; <b>Root Cause:</b> Release v2.4.5 introduced an unindexed query acquiring exclusive row locks on checkout tables.
@@ -1167,7 +1261,7 @@ FROM pg_stat_activity
 WHERE state != 'idle' 
 ORDER BY duration DESC LIMIT 5;""", language="sql")
 
-        if st.button("▶ Run Live Diagnostic Query", key="run_diag_btn", use_container_width=True):
+        if st.button("Run Live Diagnostic Query", key="run_diag_btn", use_container_width=True):
             with st.status("Querying postgres-primary for active locks...", expanded=True) as status:
                 st.write("Connecting to postgres-primary.prod (11ms)...")
                 st.write("Inspecting pg_stat_activity for duration > 5s...")
@@ -1193,12 +1287,12 @@ ORDER BY duration DESC LIMIT 5;""", language="sql")
                 }
             ])
             st.dataframe(diag_results, use_container_width=True, hide_index=True)
-            st.markdown("<span style='font-size:12px; color:#f87171; font-weight:600;'>🚨 Finding: PID 48219 is holding an unindexed exclusive row lock, starving connection pools! Matches INC-101 precedent!</span>", unsafe_allow_html=True)
+            st.markdown("<span style='font-size:12px; color:#f87171; font-weight:600;'>Finding: PID 48219 is holding an unindexed exclusive row lock, starving connection pools! Matches INC-101 precedent!</span>", unsafe_allow_html=True)
 
         if not is_recovered:
             st.checkbox("Authorize advisory remediation (Sign-Off)", key="auth_plan_user")
             if st.session_state.get("auth_plan_user", False):
-                if st.button("⚡ Execute Advisory Remediation (Kill PID 48219)", key="exec_remed_btn", use_container_width=True):
+                if st.button("Execute Advisory Remediation (Kill PID 48219)", key="exec_remed_btn", use_container_width=True):
                     with st.status("Executing live remediation sequence...", expanded=True) as status:
                         st.write("Terminating blocking lock query PID 48219 via `SELECT pg_terminate_backend(48219)`... Done.")
                         st.write("Draining PgBouncer pooler backlog (44 active -> 18 healthy)... Complete.")
@@ -1216,44 +1310,140 @@ ORDER BY duration DESC LIMIT 5;""", language="sql")
 
 
 # =========================================================================
-# TAB 5: RESOLUTION (INCIDENT RESOLUTION & HINDSIGHT INGESTION)
+# TAB 5: RESOLUTION (INCIDENT RESOLUTION & PERMANENT FIX PLAYBOOK)
 # =========================================================================
 elif st.session_state["nav_tab"] == "Resolution":
     st.markdown("""
     <div class="dashboard-header">
         <div>
-            <h1 class="dashboard-title">Incident Resolution & Ingestion Studio</h1>
-            <p class="dashboard-subtitle">Synthesize verified lessons and commit to Hindsight so future engineers never repeat this outage.</p>
+            <h1 class="dashboard-title">Incident Resolution & Permanent Fix Playbook</h1>
+            <p class="dashboard-subtitle">Synthesize verified triage solutions, compare historical approaches, and deploy long-lasting architectural safeguards.</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    c_r1, c_r2 = st.columns(2)
-
-    with c_r1:
-        st.markdown("""
-        <div style="background:#0a0f1d; border:1px solid #1a2742; border-left:4px solid #10b981; border-radius:8px; padding:16px;">
-            <div style="font-size:13px; font-weight:800; color:#34d399; text-transform:uppercase; margin-bottom:10px;">
-                Verified Experience Prepared for Ingestion
+    # 1. WHAT NEEDS TO BE RESOLVED (Current Incident Objectives)
+    st.markdown("""
+    <div style="background:#0b1120; border:1px solid #1a2538; border-radius:8px; padding:16px; margin-bottom:18px;">
+        <div style="font-size:13.5px; font-weight:700; color:#ffffff; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px;">
+            Immediate Resolution Objectives for Active Incident
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
+            <div style="background:#070b14; border:1px solid #162032; border-left:3px solid #ef4444; border-radius:6px; padding:12px;">
+                <div style="font-size:11px; font-weight:700; color:#f87171; text-transform:uppercase;">Priority 1: Customer Traffic</div>
+                <div style="font-size:13px; font-weight:600; color:#f1f5f9; margin-top:4px;">Eliminate HTTP 504 Timeouts</div>
+                <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Restore checkout-service success rate to >99.9% on /api/v1/checkout/pay.</div>
             </div>
-            <div style="font-size:13px; color:#cbd5e1; line-height:1.5;">
-                &bull; <b>Incident Postmortem:</b> Release v2.4.5 caused database connection pool exhaustion on checkout-service.<br>
-                &bull; <b>Anti-Pattern Registered:</b> Scaling pod deployment replicas from 4 to 12 worsened latency to 8.2s (Do Not Attempt).<br>
-                &bull; <b>Remediation Playbook:</b> Terminate unindexed query PID, enforce statement timeout, and cap pod connection limits to 8.<br>
-                &bull; <b>Target Bank:</b> <code>recallops-vault</code> (Hindsight Cloud Persistent)
+            <div style="background:#070b14; border:1px solid #162032; border-left:3px solid #f59e0b; border-radius:6px; padding:12px;">
+                <div style="font-size:11px; font-weight:700; color:#fbbf24; text-transform:uppercase;">Priority 2: Infrastructure</div>
+                <div style="font-size:13px; font-weight:600; color:#f1f5f9; margin-top:4px;">Drain Postgres Connection Pool</div>
+                <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Reduce pool saturation from 88% down to healthy baseline (&lt; 35%).</div>
+            </div>
+            <div style="background:#070b14; border:1px solid #162032; border-left:3px solid #10b981; border-radius:6px; padding:12px;">
+                <div style="font-size:11px; font-weight:700; color:#34d399; text-transform:uppercase;">Priority 3: Reliability</div>
+                <div style="font-size:13px; font-weight:600; color:#f1f5f9; margin-top:4px;">Prevent Deployment Recurrence</div>
+                <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Commit compound index & query statement timeouts to code repository.</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. COMPARISON: HOW PREVIOUS APPROACHES WERE DONE (SUCCESSFUL VS FAILED)
+    st.markdown("<div style='font-size:15px; font-weight:700; color:#ffffff; margin-bottom:10px;'>Historical Precedent Analysis (INC-101 Comparison)</div>", unsafe_allow_html=True)
+    c_prev1, c_prev2 = st.columns(2)
+    with c_prev1:
+        st.markdown("""
+        <div style="background:rgba(225,29,72,0.06); border:1px solid rgba(225,29,72,0.25); border-left:4px solid #e11d48; border-radius:8px; padding:14px; height:100%;">
+            <div style="font-size:13px; font-weight:700; color:#f87171; margin-bottom:6px;">Previous Failed Approaches (What Failed & Why)</div>
+            <div style="font-size:12.5px; color:#cbd5e1; line-height:1.5;">
+                &bull; <b>Horizontal Pod Auto-Scaling (INC-101):</b> An on-call engineer scaled checkout pods from 4 to 12. Each new pod immediately opened 20 DB connections, pushing Postgres to 100% saturation and worsening p99 latency to <b>8.2 seconds</b>.<br>
+                &bull; <b>Container Restarts:</b> Restarting pods without killing the blocking query spawned a thundering herd where all restarted containers re-requested the locked table simultaneously.<br>
+                &bull; <b>Key Lesson:</b> Never scale application pods when the bottleneck is backend row locks or database connection starvation.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c_prev2:
+        st.markdown("""
+        <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); border-left:4px solid #10b981; border-radius:8px; padding:14px; height:100%;">
+            <div style="font-size:13px; font-weight:700; color:#34d399; margin-bottom:6px;">Previous Successful Solution (How it was Recovered)</div>
+            <div style="font-size:12.5px; color:#cbd5e1; line-height:1.5;">
+                &bull; <b>Targeted Process Termination:</b> Identified the blocking PID (48219) holding an unindexed <code>FOR UPDATE</code> lock on <code>exchange_rates</code> and safely terminated it via <code>SELECT pg_terminate_backend(pid)</code>.<br>
+                &bull; <b>Connection Pool Throttling:</b> Capped max client connections in PgBouncer to 8 per pod to prevent cascading saturation.<br>
+                &bull; <b>Observed Result:</b> The connection pool queue emptied in 45 seconds, and p99 latency normalized from 5,400ms down to <b>210ms in 90 seconds</b>.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-    with c_r2:
-        st.markdown("**Resolve & Save to Memory:**")
+    st.write("")
+
+    # 3. MULTI-TIERED RESOLUTION STRATEGIES (IMMEDIATE -> INTERMEDIATE -> LONG LASTING)
+    st.markdown("<div style='font-size:15px; font-weight:700; color:#ffffff; margin-bottom:10px;'>Resolution Playbook: Immediate Hotfix to Long-Lasting Architecture</div>", unsafe_allow_html=True)
+    t1, t2, t3 = st.columns(3)
+    with t1:
+        st.markdown("""
+        <div style="background:#090e1a; border:1px solid #182338; border-top:3px solid #ef4444; border-radius:8px; padding:14px;">
+            <div style="font-size:12px; font-weight:700; color:#f87171; text-transform:uppercase;">Tier 1: Immediate Hotfix (0-5m)</div>
+            <div style="font-size:13px; font-weight:600; color:#f1f5f9; margin:4px 0 8px 0;">Kill Locking Backend Query</div>
+            <div style="font-size:12px; color:#94a3b8; line-height:1.45;">
+                Terminate blocking transaction immediately to relieve active 504 timeouts:
+            </div>
+            <pre style="background:#050810; padding:8px; border-radius:4px; font-size:11px; color:#38bdf8; margin-top:8px; overflow-x:auto;">SELECT pg_terminate_backend(48219);</pre>
+            <div style="font-size:11.5px; color:#64748b; margin-top:6px;">If lock recurs, roll back release v2.4.5 to v2.4.4.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with t2:
+        st.markdown("""
+        <div style="background:#090e1a; border:1px solid #182338; border-top:3px solid #f59e0b; border-radius:8px; padding:14px;">
+            <div style="font-size:12px; font-weight:700; color:#fbbf24; text-transform:uppercase;">Tier 2: Intermediate Fix (1-24h)</div>
+            <div style="font-size:13px; font-weight:600; color:#f1f5f9; margin:4px 0 8px 0;">Enforce Statement Timeout & Pool Caps</div>
+            <div style="font-size:12px; color:#94a3b8; line-height:1.45;">
+                Ensure runaway transactions abort automatically before starving pool:
+            </div>
+            <pre style="background:#050810; padding:8px; border-radius:4px; font-size:11px; color:#fbbf24; margin-top:8px; overflow-x:auto;">ALTER ROLE checkout_user 
+SET statement_timeout = '3000ms';</pre>
+            <div style="font-size:11.5px; color:#64748b; margin-top:6px;">Cap PgBouncer default_pool_size to 12.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with t3:
+        st.markdown("""
+        <div style="background:#090e1a; border:1px solid #182338; border-top:3px solid #10b981; border-radius:8px; padding:14px;">
+            <div style="font-size:12px; font-weight:700; color:#34d399; text-transform:uppercase;">Tier 3: Long-Lasting Fix (Permanent)</div>
+            <div style="font-size:13px; font-weight:600; color:#f1f5f9; margin:4px 0 8px 0;">Compound Index & Redis Caching</div>
+            <div style="font-size:12px; color:#94a3b8; line-height:1.45;">
+                Eliminate row lock contention and read from fast in-memory cache:
+            </div>
+            <pre style="background:#050810; padding:8px; border-radius:4px; font-size:11px; color:#34d399; margin-top:8px; overflow-x:auto;">CREATE INDEX CONCURRENTLY 
+idx_exchange_rates_currency_date 
+ON exchange_rates(currency, effective_date);</pre>
+            <div style="font-size:11.5px; color:#64748b; margin-top:6px;">Add Redis cache layer with 60s TTL for exchange rates.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.write("")
+
+    # 4. RESOLUTION FORM & HINDSIGHT INGESTION
+    c_res_box1, c_res_box2 = st.columns([1.2, 1.8])
+    with c_res_box1:
+        st.markdown(f"""
+        <div style="background:#0b1120; border:1px solid #1a2538; border-radius:8px; padding:16px;">
+            <div style="font-size:13px; font-weight:700; color:#cbd5e1; margin-bottom:8px;">Live System Recovery Status</div>
+            <div style="font-size:12.5px; color:#94a3b8; line-height:1.6;">
+                &bull; <b>Telemetry State:</b> <span style="color:{'#34d399' if is_recovered else '#f87171'}; font-weight:700;">{'STABILIZED (P99: 210ms)' if is_recovered else 'OUTAGE ACTIVE (P99: 4.9s)'}</span><br>
+                &bull; <b>Lock Status:</b> {'Terminated (PID 48219 cleared)' if is_recovered else 'Active Contention Detected'}<br>
+                &bull; <b>Hindsight Vault:</b> <code>{mem_adapter.bank_id}</code><br>
+                &bull; <b>Next Step:</b> Commit resolution postmortem below so Hindsight preserves this experience for all engineers.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c_res_box2:
         with st.form("resolve_save_form"):
+            st.markdown("<span style='font-size:13px; font-weight:700; color:#f1f5f9;'>Confirm Postmortem & Commit to Team Memory</span>", unsafe_allow_html=True)
             default_cause = "Release v2.4.5 unindexed query acquired exclusive row lock on exchange_rates, starving Postgres connection pool." if is_recovered else (current_incident.root_cause or "Release v2.4.5 multi-currency calculation held exclusive row locks on exchange_rates without compound index.")
-            default_res = "Terminated blocking lock PID 48219 via pg_terminate_backend; capped per-pod connection limit to 8." if is_recovered else (current_incident.final_resolution or "Terminated blocking query PID, added compound index on (currency, effective_date), capped pool size to 8 per pod.")
+            default_res = "Terminated blocking query PID 48219, applied compound index on (currency, effective_date), and added Redis caching with 60s TTL." if is_recovered else (current_incident.final_resolution or "Terminated blocking query PID, added compound index on (currency, effective_date), capped pool size to 8 per pod.")
             default_rec = 19 if is_recovered else (current_incident.recovery_time_minutes or 24)
 
             f_cause = st.text_input("Confirmed Root Cause:", value=default_cause)
-            f_res = st.text_input("Final Resolution:", value=default_res)
+            f_res = st.text_input("Final & Long-Lasting Resolution:", value=default_res)
             f_rec = st.number_input("Recovery Duration (Minutes):", min_value=1, max_value=300, value=default_rec)
 
             submit_save = st.form_submit_button("Resolve & Save to Memory", use_container_width=True)
@@ -1282,7 +1472,8 @@ elif st.session_state["nav_tab"] == "Resolution":
                 lessons_list = [
                     "Never scale out pods during database connection pool saturation.",
                     "Enforce statement_timeout on all currency calculation queries.",
-                    "Add compound index on table row locks before deployment."
+                    "Add compound index on table row locks before deployment.",
+                    "Implement Redis caching for frequently queried exchange rate rows."
                 ]
 
                 with st.spinner("Retaining incident experience into Hindsight memory..."):
@@ -1295,6 +1486,7 @@ elif st.session_state["nav_tab"] == "Resolution":
                         lessons_learned=lessons_list,
                     )
                 st.success(f"Incident {current_incident.incident_id} marked as RESOLVED and committed to Hindsight Cloud bank '{mem_adapter.bank_id}'! Future incidents will immediately recall this experience.")
+                st.session_state["remediation_executed"] = True
                 st.rerun()
 
 
@@ -1337,14 +1529,20 @@ elif st.session_state["nav_tab"] == "Settings":
         """, unsafe_allow_html=True)
 
     st.write("")
-    if st.button("↺ Reset Outage State (Re-run Demo)", use_container_width=True):
-        st.session_state["ran_diagnostic"] = False
-        st.session_state["remediation_executed"] = False
-        st.session_state["nav_tab"] = "Overview"
-        st.rerun()
+    st.markdown("<div style='font-size:14px; font-weight:700; color:#ffffff; margin-bottom:6px;'>Incident Simulation & Memory Administration</div>", unsafe_allow_html=True)
+    c_btn1, c_btn2 = st.columns(2)
+    with c_btn1:
+        if st.button("Reset Outage State (Re-run Demo)", use_container_width=True):
+            st.session_state["ran_diagnostic"] = False
+            st.session_state["remediation_executed"] = False
+            st.session_state["nav_tab"] = "Overview"
+            st.rerun()
+        st.caption("Clears active investigation state, lock diagnostics, and simulated hotfix so you can present the incident lifecycle to judges from scratch.")
 
-    if st.button("Re-Seed Memory Bank Baseline", use_container_width=True):
-        from seed_memory import seed_memory_bank
-        seed_memory_bank()
-        st.success("Re-seeded memory bank baseline.")
-        st.rerun()
+    with c_btn2:
+        if st.button("Re-Seed Memory Bank Baseline", use_container_width=True):
+            from seed_memory import seed_memory_bank
+            seed_memory_bank()
+            st.success("Re-seeded memory bank baseline.")
+            st.rerun()
+        st.caption("Re-uploads historical incident postmortems, action outcomes, and runbook patterns from data/synthetic_incidents.json into your Hindsight Cloud vault.")
