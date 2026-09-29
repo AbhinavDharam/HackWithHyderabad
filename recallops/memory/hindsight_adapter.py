@@ -135,9 +135,11 @@ class HindsightAdapter:
                 results = []
                 if hasattr(response, "results") and response.results:
                     for item in response.results:
+                        doc_id = getattr(item, "document_id", None) or getattr(item, "id", None) or getattr(item, "doc_id", None) or "DOC-VAULT"
+                        item_text = getattr(item, "text", None) or getattr(item, "content", None) or str(item)
                         results.append({
-                            "text": getattr(item, "text", str(item)),
-                            "document_id": getattr(item, "document_id", None),
+                            "text": item_text,
+                            "document_id": doc_id,
                             "metadata": getattr(item, "metadata", {}),
                             "score": getattr(item, "score", 0.85),
                         })

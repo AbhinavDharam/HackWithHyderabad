@@ -86,13 +86,15 @@ def test_diagnostics():
     elapsed = time.time() - start_t
 
     if llm.is_live_llm_ready():
-        console.print(f"[bold green]✓ Live Cloud LLM Connected ({GRO_MODEL if 'GRO_MODEL' in locals() else GROQ_MODEL})[/bold green]")
+        active_provider = llm.get_provider_name()
+        active_model_name = GEMINI_MODEL if "gemini" in active_provider.lower() else GROQ_MODEL
+        console.print(f"[bold green]✓ Live Cloud LLM Connected ({active_provider} — {active_model_name})[/bold green]")
         console.print(f"Latency: [bold cyan]{elapsed:.2f}s[/bold cyan]")
         console.print(Panel(response, title="Live Model Output", style="green"))
     else:
         console.print("[bold yellow]✓ Deterministic SRE Engine Active[/bold yellow]")
         console.print(
-            "[dim]No GROQ_API_KEY found in .env. RecallOps is running in offline/deterministic SRE mode "
+            "[dim]No API keys found in .env. RecallOps is running in offline/deterministic SRE mode "
             "so your demo is 100% reliable even without API credits.[/dim]"
         )
 
@@ -115,7 +117,8 @@ def test_diagnostics():
     results = mem.recall(query=query_test, max_results=2)
     console.print(f"\nTest Memory Recall for: [italic]'{query_test}'[/italic]")
     for r in results:
-        console.print(f"  • Found: [bold white]{r.get('document_id')}[/bold white] (Score: {r.get('score', 0):.2f})")
+        doc_label = r.get("document_id") or (r.get("text", "")[:45] + "...")
+        console.print(f"  • Found: [bold white]{doc_label}[/bold white] (Score: {r.get('score', 0):.2f})")
 
     console.print("\n[bold green]System diagnostic complete! Everything is operational.[/bold green]\n")
 
