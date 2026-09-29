@@ -25,10 +25,10 @@ class HindsightAdapter:
     Supports retain, recall, reflect, and memory bank inspection.
     """
 
-    def __init__(self, bank_id: Optional[str] = None):
-        self.bank_id = bank_id or HINDSIGHT_BANK_ID
-        self.base_url = HINDSIGHT_BASE_URL
-        self.api_key = HINDSIGHT_API_KEY
+    def __init__(self, bank_id: Optional[str] = None, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        self.bank_id = bank_id or os.getenv("HINDSIGHT_BANK_ID", HINDSIGHT_BANK_ID)
+        self.base_url = base_url or os.getenv("HINDSIGHT_BASE_URL", HINDSIGHT_BASE_URL)
+        self.api_key = api_key or os.getenv("HINDSIGHT_API_KEY", HINDSIGHT_API_KEY)
         self.local_cache_file = CACHE_DIR / f"{self.bank_id}_memory_cache.json"
         
         # In-memory mirror for speed and offline demo resilience

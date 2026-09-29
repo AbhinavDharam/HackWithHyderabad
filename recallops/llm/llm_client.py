@@ -20,10 +20,10 @@ except ImportError:
 class LLMClient:
     """Wrapper for high-speed LLM generation with fallback safety."""
 
-    def __init__(self):
-        self.groq_key = GROQ_API_KEY
-        self.openai_key = OPENAI_API_KEY
-        self.model = GROQ_MODEL
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        self.groq_key = api_key or os.getenv("GROQ_API_KEY", GROQ_API_KEY)
+        self.openai_key = os.getenv("OPENAI_API_KEY", OPENAI_API_KEY)
+        self.model = model or os.getenv("GROQ_MODEL", GROQ_MODEL)
         
         self.groq_client = None
         if GROQ_AVAILABLE and self.groq_key and self.groq_key != "your_groq_api_key_here":

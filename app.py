@@ -2,6 +2,7 @@
 RecallOps: Incident Command Center
 Enterprise Operational Incident Response Engine with Real-Time Telemetry & Hindsight Persistent Memory
 """
+import os
 import streamlit as st
 import json
 import time
@@ -700,10 +701,25 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.write("")
-    with st.expander("System & Inference Specs"):
-        st.caption(f"Inference Model: `{GROQ_MODEL}`")
-        st.caption(f"Memory Bank ID: `{stats['bank_id']}`")
-        st.caption("Vector Similarity: Cosine / Dense Embedding")
+    with st.expander("API Keys & Hindsight Integration", expanded=False):
+        has_groq = bool(llm.groq_client)
+        has_hs_cloud = bool(mem_adapter.client)
+        
+        st.markdown(f"**Groq LLM:** {'🟢 Connected (Live)' if has_groq else '🟡 Fallback Engine'}")
+        input_groq = st.text_input("Groq API Key:", value=os.getenv("GROQ_API_KEY", ""), type="password", placeholder="gsk_...", help="From https://console.groq.com")
+        if input_groq and input_groq != os.getenv("GROQ_API_KEY", ""):
+            os.environ["GROQ_API_KEY"] = input_groq
+            st.cache_resource.clear()
+            st.rerun()
+
+        st.markdown(f"**Hindsight Memory:** {'🟢 Cloud Connected' if has_hs_cloud else '🟢 Local Vault (18 records)'}")
+        input_hs = st.text_input("Hindsight API Key:", value=os.getenv("HINDSIGHT_API_KEY", ""), type="password", placeholder="hs_...", help="From https://ui.hindsight.vectorize.io (Promo: MEMHACK99)")
+        if input_hs and input_hs != os.getenv("HINDSIGHT_API_KEY", ""):
+            os.environ["HINDSIGHT_API_KEY"] = input_hs
+            st.cache_resource.clear()
+            st.rerun()
+            
+        st.caption(f"Bank ID: `{stats['bank_id']}` | Model: `{GROQ_MODEL}`")
         if st.button("Reset Baseline Memory", use_container_width=True):
             from seed_memory import seed_memory_bank
             seed_memory_bank()
