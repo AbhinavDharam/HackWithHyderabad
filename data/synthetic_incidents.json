@@ -1,0 +1,424 @@
+[
+  {
+    "incident_id": "INC-101",
+    "title": "Postgres Connection Pool Exhaustion on Checkout Flow",
+    "affected_service": "checkout-service",
+    "affected_components": [
+      "postgres-pool",
+      "pgbouncer",
+      "api-gateway"
+    ],
+    "severity": "SEV-1 (Critical Outage)",
+    "status": "RESOLVED",
+    "created_at": "2026-09-14T10:15:00Z",
+    "resolved_at": "2026-09-14T11:02:00Z",
+    "symptoms": [
+      "HTTP 504 Gateway Timeout on /api/v1/checkout/pay",
+      "p99 latency spiked from 180ms to 5400ms",
+      "checkout-service active DB connections hit pool maximum 100/100",
+      "Upstream ingress queue backlog grew to 1,200 pending requests"
+    ],
+    "metrics": [
+      {
+        "metric_name": "p99_latency_ms",
+        "observed_value": 5400.0,
+        "baseline_value": 180.0,
+        "unit": "ms"
+      },
+      {
+        "metric_name": "db_connection_utilization_pct",
+        "observed_value": 100.0,
+        "baseline_value": 35.0,
+        "unit": "%"
+      },
+      {
+        "metric_name": "error_rate_pct",
+        "observed_value": 24.5,
+        "baseline_value": 0.05,
+        "unit": "%"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_type": "deployment",
+        "description": "Release v2.4.1 deployed 20 minutes prior with new discount eligibility logic",
+        "timestamp": "2026-09-14T09:55:00Z"
+      }
+    ],
+    "investigation_steps": [
+      "Checked ingress gateway error logs: saw 504 Gateway Timeouts",
+      "Hypothesized high traffic overload and scaled up pod replicas",
+      "Noticed database connection count exploded and Postgres CPU pegged at 98%",
+      "Inspected pg_stat_activity for running queries",
+      "Found table lock on user_coupons table caused by missing index",
+      "Killed slow query PID 89104 and restored pool limits"
+    ],
+    "actions_attempted": [
+      {
+        "action_id": "ACT-101-1",
+        "timestamp": "2026-09-14T10:22:00Z",
+        "action_taken": "Scaled checkout-service Kubernetes deployment from 4 pods to 12 pods",
+        "hypothesis": "Assumed pod CPU throttling under traffic surge; more replicas would distribute load",
+        "outcome": "FAILED",
+        "observable_effect": "Each new pod opened 25 database connections; overwhelmed PgBouncer, caused connection resets, latency increased to 8200ms",
+        "actor": "@oncall-devops"
+      },
+      {
+        "action_id": "ACT-101-2",
+        "timestamp": "2026-09-14T10:30:00Z",
+        "action_taken": "Increased ingress timeout from 5000ms to 15000ms",
+        "hypothesis": "Give slow checkout requests more time to finish without throwing 504 errors",
+        "outcome": "INEFFECTIVE",
+        "observable_effect": "Requests simply piled up longer; thread pool on gateway exhausted, spreading latency to unrelated endpoints",
+        "actor": "@oncall-devops"
+      },
+      {
+        "action_id": "ACT-101-3",
+        "timestamp": "2026-09-14T10:42:00Z",
+        "action_taken": "Executed SELECT pg_terminate_backend(89104) and throttled coupon cron job",
+        "hypothesis": "Terminate runaway unindexed table scan holding exclusive row locks",
+        "outcome": "SUCCESSFUL",
+        "observable_effect": "Active connection queue drained from 100 to 28; p99 latency returned to 210ms within 90 seconds",
+        "actor": "@lead-sre"
+      },
+      {
+        "action_id": "ACT-101-4",
+        "timestamp": "2026-09-14T10:50:00Z",
+        "action_taken": "Scaled pods back to 4 and set max_connections per pod to 8 in checkout-service config",
+        "hypothesis": "Cap connection footprint per pod to prevent future database connection pool starvation",
+        "outcome": "SUCCESSFUL",
+        "observable_effect": "Database connection ceiling maintained at 32 connections under full traffic",
+        "actor": "@lead-sre"
+      }
+    ],
+    "root_cause": "Release v2.4.1 introduced SELECT * FROM user_coupons WHERE code = $1 FOR UPDATE without an index on 'code'. Under concurrent checkouts, queries ran full sequential table scans and held row locks for >4500ms, completely saturating the PostgreSQL connection pool.",
+    "final_resolution": "Terminated blocking query PID 89104, scaled down extraneous pods, added compound index on (code, user_id), and enforced a 3s statement_timeout in the PostgreSQL connection string.",
+    "recovery_time_minutes": 47,
+    "lessons_learned": [
+      "CRITICAL ANTI-PATTERN: Never scale out application pods when database connection pool is saturated; extra pods exacerbate pool starvation.",
+      "Always inspect pg_stat_activity with wait_event_type = 'Lock' before restarting or scaling services.",
+      "Enforce statement_timeout = 3000ms at the pooler level to auto-abort runaway queries before they starve the pool."
+    ],
+    "runbook_recommendations": [
+      "Run: SELECT pid, now() - query_start AS duration, query, state FROM pg_stat_activity WHERE state != 'idle' ORDER BY duration DESC LIMIT 5;",
+      "Check PgBouncer active clients vs pool size in Grafana dashboard 'Postgres Core Pooler'."
+    ]
+  },
+  {
+    "incident_id": "INC-102",
+    "title": "Redis Cache Stampede & Replica Saturation During Flash Sale",
+    "affected_service": "inventory-service",
+    "affected_components": [
+      "redis-cache",
+      "aurora-mysql-replica"
+    ],
+    "severity": "SEV-2 (Major Degradation)",
+    "status": "RESOLVED",
+    "created_at": "2026-09-18T14:02:00Z",
+    "resolved_at": "2026-09-18T14:41:00Z",
+    "symptoms": [
+      "HTTP 500 Internal Server Error rate 18.2% on /api/v1/inventory/stock",
+      "Redis cluster CPU utilization spiked to 99.4%",
+      "MySQL read replica replication lag spiked from 2ms to 42 seconds",
+      "Catalog stock status displaying 'Out of Stock' incorrectly to shoppers"
+    ],
+    "metrics": [
+      {
+        "metric_name": "error_rate_pct",
+        "observed_value": 18.2,
+        "baseline_value": 0.01,
+        "unit": "%"
+      },
+      {
+        "metric_name": "redis_cpu_utilization_pct",
+        "observed_value": 99.4,
+        "baseline_value": 22.0,
+        "unit": "%"
+      },
+      {
+        "metric_name": "replication_lag_seconds",
+        "observed_value": 42.0,
+        "baseline_value": 0.05,
+        "unit": "s"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_type": "traffic_spike",
+        "description": "Flash sale notification push sent to 450,000 mobile app users at 14:00 UTC",
+        "timestamp": "2026-09-18T14:00:00Z"
+      }
+    ],
+    "investigation_steps": [
+      "Received alert on Redis CPU > 95%",
+      "Observed thousands of concurrent requests querying item stock for 3 trending flash-sale SKUs",
+      "Identified that cache key expired simultaneously for all 3 hot items",
+      "Implemented single-flight cache mutex and TTL jitter"
+    ],
+    "actions_attempted": [
+      {
+        "action_id": "ACT-102-1",
+        "timestamp": "2026-09-18T14:10:00Z",
+        "action_taken": "Executed FLUSHDB on degraded Redis cache node to purge corrupted cache",
+        "hypothesis": "Believed Redis cache memory fragmentation or corrupted keys caused high CPU",
+        "outcome": "FAILED",
+        "observable_effect": "Flushing cache dumped 100% of read traffic directly onto MySQL database, crashing the read replica instantly",
+        "actor": "@junior-sre"
+      },
+      {
+        "action_id": "ACT-102-2",
+        "timestamp": "2026-09-18T14:25:00Z",
+        "action_taken": "Applied emergency hotfix enabling singleflight request coalescing in inventory-service",
+        "hypothesis": "Ensure only 1 backend query hits database per cache miss, while concurrent requests await same promise",
+        "outcome": "SUCCESSFUL",
+        "observable_effect": "MySQL query rate for hot SKUs plummeted from 14,000 QPS to 1 QPS; replica lag recovered in 3 minutes",
+        "actor": "@lead-sre"
+      }
+    ],
+    "root_cause": "The top 3 flash sale SKUs were cached with fixed 300s TTL without randomized jitter. When the TTL expired at 14:05 UTC during peak traffic, 14,000 concurrent requests simultaneously missed cache and pounded the underlying MySQL read replica (thundering herd problem).",
+    "final_resolution": "Implemented singleflight request coalescing in the Go inventory service and injected randomized TTL jitter (+/- 25%) on all cache writes.",
+    "recovery_time_minutes": 39,
+    "lessons_learned": [
+      "CRITICAL ANTI-PATTERN: Never run FLUSHDB or flush cache clusters during high traffic spikes; it creates an immediate catastrophic database overload.",
+      "All cache keys for high-cardinality promotion items must employ TTL jitter and singleflight coalescing.",
+      "Configure circuit breakers between cache layer and MySQL read replica."
+    ],
+    "runbook_recommendations": [
+      "Check Redis hotkeys using: redis-cli --hotkeys",
+      "Monitor read replica thread pool status: SHOW PROCESSLIST;"
+    ]
+  },
+  {
+    "incident_id": "INC-103",
+    "title": "Authentication Gateway Lockup due to Uncached External JWKS Fetch",
+    "affected_service": "auth-service",
+    "affected_components": [
+      "jwt-verifier",
+      "api-gateway"
+    ],
+    "severity": "SEV-1 (Critical Outage)",
+    "status": "RESOLVED",
+    "created_at": "2026-09-21T08:10:00Z",
+    "resolved_at": "2026-09-21T08:44:00Z",
+    "symptoms": [
+      "HTTP 401 Unauthorized spikes on 92% of inbound API requests across all services",
+      "auth-service response latency exceeded 10,000ms",
+      "All downstream microservices failing token verification",
+      "auth-service container memory steadily climbed until OOMKilled"
+    ],
+    "metrics": [
+      {
+        "metric_name": "error_rate_pct",
+        "observed_value": 92.0,
+        "baseline_value": 0.02,
+        "unit": "%"
+      },
+      {
+        "metric_name": "p99_latency_ms",
+        "observed_value": 10500.0,
+        "baseline_value": 12.0,
+        "unit": "ms"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_type": "dependency_outage",
+        "description": "Third-party Identity Provider (Auth0) reported degraded latency in EU region",
+        "timestamp": "2026-09-21T08:05:00Z"
+      }
+    ],
+    "investigation_steps": [
+      "Noticed global 401 cascade across all frontends",
+      "Restarted auth-service pods, which failed health check startup probes",
+      "Traced outbound network calls from auth-service",
+      "Identified auth-service making synchronous HTTPS GET to Auth0 /.well-known/jwks.json on every incoming request"
+    ],
+    "actions_attempted": [
+      {
+        "action_id": "ACT-103-1",
+        "timestamp": "2026-09-21T08:18:00Z",
+        "action_taken": "Restarted auth-service deployment via kubectl rollout restart",
+        "hypothesis": "Clear memory leak and reset stuck HTTP connections",
+        "outcome": "INEFFECTIVE",
+        "observable_effect": "New pods were unable to pass readiness probes because external IdP endpoint was timing out; entered CrashLoopBackOff",
+        "actor": "@oncall-devops"
+      },
+      {
+        "action_id": "ACT-103-2",
+        "timestamp": "2026-09-21T08:32:00Z",
+        "action_taken": "Configured local in-memory JWKS public key cache with 24-hour TTL and fallback to last known valid keys",
+        "hypothesis": "Eliminate synchronous external network dependency during token validation",
+        "outcome": "SUCCESSFUL",
+        "observable_effect": "Auth verification latency dropped to 1.8ms; error rate returned to 0% immediately",
+        "actor": "@lead-security-eng"
+      }
+    ],
+    "root_cause": "The JWT validation library had its in-memory key cache disabled due to an incorrect configuration flag in a recent config update. Every inbound API request initiated an outbound HTTPS call to download JWKS public keys. When the external IdP experienced latency, all auth worker threads hung.",
+    "final_resolution": "Enabled local persistent in-memory caching for JWKS public keys with stale-while-revalidate and a 24-hour local expiration.",
+    "recovery_time_minutes": 34,
+    "lessons_learned": [
+      "Never allow synchronous outbound external HTTP dependencies in critical authentication request path.",
+      "Readiness probes must never depend on third-party external networks or external IdP availability.",
+      "Public signing keys change rarely; cache them persistently with graceful degradation."
+    ],
+    "runbook_recommendations": [
+      "Verify JWKS cache status via: curl -s http://localhost:8080/internal/jwks-cache/status",
+      "Verify egress connectivity to IdP: curl -I -m 2 https://auth.company.com/.well-known/jwks.json"
+    ]
+  },
+  {
+    "incident_id": "INC-104",
+    "title": "Payment Webhook Thread Starvation & Queue Congestion",
+    "affected_service": "payment-service",
+    "affected_components": [
+      "stripe-webhook-listener",
+      "celery-worker"
+    ],
+    "severity": "SEV-2 (Major Degradation)",
+    "status": "RESOLVED",
+    "created_at": "2026-09-24T16:20:00Z",
+    "resolved_at": "2026-09-24T17:05:00Z",
+    "symptoms": [
+      "Stripe payment confirmations delayed by up to 2 hours",
+      "Stripe automated webhook delivery reporting 503 Service Unavailable",
+      "Pending webhook queue backlog exceeded 48,000 events",
+      "Customers reporting completed card charges but unfulfilled digital orders"
+    ],
+    "metrics": [
+      {
+        "metric_name": "webhook_backlog_count",
+        "observed_value": 48200.0,
+        "baseline_value": 15.0,
+        "unit": "events"
+      },
+      {
+        "metric_name": "p99_latency_ms",
+        "observed_value": 8500.0,
+        "baseline_value": 240.0,
+        "unit": "ms"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_type": "scheduled_job",
+        "description": "Monthly subscription billing run triggered 50,000 webhook events simultaneously",
+        "timestamp": "2026-09-24T16:15:00Z"
+      }
+    ],
+    "investigation_steps": [
+      "Observed Stripe webhook endpoint 503 error alerts",
+      "Checked Celery worker queue metrics: saw massive backlog",
+      "Discovered synchronous accounting ledger API calls inside the HTTP webhook handler"
+    ],
+    "actions_attempted": [
+      {
+        "action_id": "ACT-104-1",
+        "timestamp": "2026-09-24T16:30:00Z",
+        "action_taken": "Increased Gunicorn synchronous HTTP worker threads from 16 to 128",
+        "hypothesis": "Allow more concurrent incoming webhook connections to prevent 503 errors",
+        "outcome": "FAILED",
+        "observable_effect": "Memory usage surged to 100%; Linux kernel OOM killer started killing Gunicorn processes continuously",
+        "actor": "@oncall-devops"
+      },
+      {
+        "action_id": "ACT-104-2",
+        "timestamp": "2026-09-24T16:48:00Z",
+        "action_taken": "Refactored webhook endpoint to return HTTP 200 immediately after pushing raw payload into Redis queue",
+        "hypothesis": "Decouple synchronous HTTP acknowledgment from asynchronous ledger reconciliation",
+        "outcome": "SUCCESSFUL",
+        "observable_effect": "HTTP webhook response dropped to 8ms; Stripe stopped retrying; queue backlog cleared in 18 minutes",
+        "actor": "@staff-engineer"
+      }
+    ],
+    "root_cause": "The webhook handler performed synchronous external ERP ledger reconciliation and PDF receipt generation before returning HTTP 200 to Stripe. When batch billing fired 50,000 events, worker threads starved and Stripe began exponential retries, multiplying traffic by 4x.",
+    "final_resolution": "Decoupled webhook ingestion from business processing: handlers now write raw payloads into an async queue and acknowledge with HTTP 200 immediately within <15ms.",
+    "recovery_time_minutes": 45,
+    "lessons_learned": [
+      "CRITICAL RULE: Webhook endpoints must never perform synchronous business processing or external network calls before acknowledging receipt.",
+      "Avoid inflating synchronous worker threads to handle backlogs; convert to async event queues instead."
+    ],
+    "runbook_recommendations": [
+      "Inspect webhook queue depth: redis-cli LLEN queues:payment_webhooks",
+      "Check Stripe webhook event delivery dashboard for 5xx retry rates."
+    ]
+  },
+  {
+    "incident_id": "INC-105",
+    "title": "P99 Latency Surge & 504 Timeouts on Checkout API Post-Release",
+    "affected_service": "checkout-service",
+    "affected_components": [
+      "postgres-pool",
+      "checkout-api"
+    ],
+    "severity": "SEV-1 (Critical Outage)",
+    "status": "RESOLVED",
+    "created_at": "2026-09-28T21:40:00Z",
+    "resolved_at": null,
+    "symptoms": [
+      "HTTP 504 Gateway Timeouts rising rapidly on /api/v1/checkout/finalize",
+      "checkout-service p99 latency spiked from 195ms to 4900ms",
+      "Postgres connection pool queue count steadily growing (currently 88/100 active connections)",
+      "Customer cart abandonments up 340% in last 15 minutes"
+    ],
+    "metrics": [
+      {
+        "metric_name": "p99_latency_ms",
+        "observed_value": 4900.0,
+        "baseline_value": 195.0,
+        "unit": "ms"
+      },
+      {
+        "metric_name": "db_connection_utilization_pct",
+        "observed_value": 88.0,
+        "baseline_value": 30.0,
+        "unit": "%"
+      },
+      {
+        "metric_name": "error_rate_pct",
+        "observed_value": 19.8,
+        "baseline_value": 0.08,
+        "unit": "%"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_type": "deployment",
+        "description": "Release v2.4.5 deployed 14 minutes ago with new multi-currency checkout calculation",
+        "timestamp": "2026-09-28T21:26:00Z"
+      }
+    ],
+    "investigation_steps": [
+      "Alert triggered on PagerDuty: checkout-service high latency and 504 rates",
+      "Incident room opened in Slack #incident-20260928-checkout",
+      "Engineer reviewing telemetry and checking if previous similar incidents occurred"
+    ],
+    "actions_attempted": [
+      {
+        "action_id": "ACT-INC-105-1",
+        "timestamp": "2026-09-29T09:13:36Z",
+        "action_taken": "Attempted pod restart via rollout restart",
+        "hypothesis": "Reset stuck connections",
+        "outcome": "INEFFECTIVE",
+        "observable_effect": "Pods restarted but connection queue immediately hit 100/100 again",
+        "actor": "@oncall-engineer"
+      },
+      {
+        "action_id": "ACT-INC-105-2",
+        "timestamp": "2026-09-29T09:13:36Z",
+        "action_taken": "Killed locking PID 91204 and capped pool to 8 per pod",
+        "hypothesis": "Eliminate lock contention",
+        "outcome": "SUCCESSFUL",
+        "observable_effect": "Connection pool drained to 22%; p99 latency normalized to 180ms",
+        "actor": "@lead-sre"
+      }
+    ],
+    "root_cause": "Release v2.4.5 multi-currency calculation held exclusive row locks on exchange_rates table without compound index.",
+    "final_resolution": "Terminated query PID 91204, added migration index on (currency, effective_date), and adjusted statement_timeout to 3s.",
+    "recovery_time_minutes": 24,
+    "lessons_learned": [
+      "Enforce statement_timeout on all exchange rate queries.",
+      "Never scale out pods during database lock contention."
+    ],
+    "runbook_recommendations": []
+  }
+]
