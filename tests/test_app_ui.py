@@ -36,11 +36,11 @@ def test_app_memory_mode_toggle():
     radio = at.radio[0]
 
     # Verify options exist
-    assert any("MEMORY" in opt for opt in radio.options)
+    assert any("memory" in opt.lower() for opt in radio.options)
     print("✓ Default agent mode is active.")
 
-    # Select the second option (WITHOUT MEMORY)
-    cold_opt = next(opt for opt in radio.options if "WITHOUT" in opt)
+    # Select the second option (OFF / WITHOUT MEMORY)
+    cold_opt = next(opt for opt in radio.options if "off" in opt.lower() or "without" in opt.lower())
     radio.set_value(cold_opt).run()
     assert not at.exception
     assert radio.value == cold_opt
@@ -72,14 +72,14 @@ def test_app_form_submit():
     at.run()
     assert not at.exception
 
-    # Find the Resolve & Remember button
-    resolve_btn = next((b for b in at.button if "RESOLVE INCIDENT" in b.label), None)
-    assert resolve_btn is not None, "Resolve & Remember button not found."
+    # Find the Resolve & Save to Memory button
+    resolve_btn = next((b for b in at.button if "Resolve & Save" in b.label), None)
+    assert resolve_btn is not None, "Resolve & Save to Memory button not found."
     
     # Click resolve button
     resolve_btn.click().run()
     assert not at.exception
-    print("✓ Successfully executed 'RESOLVE INCIDENT & REMEMBER' workflow.")
+    print("✓ Successfully executed 'Resolve & Save to Memory' workflow.")
 
 
 if __name__ == "__main__":
