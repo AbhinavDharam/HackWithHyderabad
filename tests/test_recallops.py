@@ -91,6 +91,28 @@ class TestRecallOps(unittest.TestCase):
         self.assertGreater(len(results), 0)
         self.assertTrue(any("checkout-service" in r["text"] for r in results))
 
+    def test_hindsight_adapter_auto_seed_on_empty_cache(self):
+        """Verifies that fresh cloud deployments without .cache auto-seed baseline memories."""
+        fresh_bank = "fresh-cloud-vault-test"
+        fresh_adapter = HindsightAdapter(bank_id=fresh_bank)
+        
+        # Must auto-seed baseline without manual intervention
+        stats = fresh_adapter.get_stats()
+        self.assertGreaterEqual(stats["total_memories"], 20)
+        self.assertGreaterEqual(stats["postmortems"], 4)
+        self.assertGreaterEqual(stats["action_experiences"], 10)
+        
+        # Must be able to recall baseline records immediately
+        matches = fresh_adapter.recall("database pool connection checkout", max_results=3)
+        self.assertGreater(len(matches), 0)
+        
+        # Cleanup test cache file
+        if fresh_adapter.local_cache_file.exists():
+            try:
+                fresh_adapter.local_cache_file.unlink()
+            except Exception:
+                pass
+
     def test_multi_signal_relevance_engine(self):
         active_incident = Incident(
             incident_id="TEST-ACTIVE-1",

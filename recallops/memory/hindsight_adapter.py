@@ -8,7 +8,7 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-from recallops.config import HINDSIGHT_BASE_URL, HINDSIGHT_API_KEY, HINDSIGHT_BANK_ID, CACHE_DIR
+from recallops.config import HINDSIGHT_BASE_URL, HINDSIGHT_API_KEY, HINDSIGHT_BANK_ID, CACHE_DIR, DATA_DIR
 
 logger = logging.getLogger("recallops.memory")
 
@@ -31,7 +31,7 @@ class HindsightAdapter:
         self.api_key = api_key or os.getenv("HINDSIGHT_API_KEY", HINDSIGHT_API_KEY)
         self.local_cache_file = CACHE_DIR / f"{self.bank_id}_memory_cache.json"
         
-        # In-memory mirror for speed and offline demo resilience
+        # In-memory mirror for speed and offline demo resilience (auto-seeds if cache is missing)
         self._local_memory_bank: List[Dict[str, Any]] = self._load_local_cache()
         
         # Official Hindsight Client
@@ -46,15 +46,85 @@ class HindsightAdapter:
             except Exception as e:
                 logger.warning(f"Could not connect to live Hindsight service: {e}. Falling back to local cache mode.")
 
+    def reload_cache(self):
+        """Force reloads memory bank from disk or baseline."""
+        self._local_memory_bank = self._load_local_cache()
+
     def _load_local_cache(self) -> List[Dict[str, Any]]:
-        """Loads cached memory units from disk."""
+        """
+        Loads cached memory units from disk.
+        If cache file is missing or empty (e.g. fresh cloud deployment on Streamlit Cloud),
+        automatically seeds from bundled baseline memory records or synthetic incidents.
+        """
         if self.local_cache_file.exists():
             try:
                 with open(self.local_cache_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    if data and len(data) > 0:
+                        return data
             except Exception as e:
                 logger.error(f"Error loading local cache: {e}")
-        return []
+
+        # Fallback 1: Bundled baseline bank (committed to repository for cloud deployments)
+        baseline_file = DATA_DIR / "baseline_memory_bank.json"
+        if baseline_file.exists():
+            try:
+                with open(baseline_file, "r", encoding="utf-8") as f:
+                    baseline_data = json.load(f)
+                    if baseline_data and len(baseline_data) > 0:
+                        logger.info(f"Loaded {len(baseline_data)} baseline memories from {baseline_file}")
+                        # Cache locally for faster subsequent access
+                        try:
+                            self.local_cache_file.parent.mkdir(parents=True, exist_ok=True)
+                            with open(self.local_cache_file, "w", encoding="utf-8") as out_f:
+                                json.dump(baseline_data, out_f, indent=2)
+                        except Exception:
+                            pass
+                        return baseline_data
+            except Exception as e:
+                logger.error(f"Error loading baseline memory file: {e}")
+
+        # Fallback 2: Dynamically decompose from synthetic_incidents.json
+        return self._seed_from_synthetic_incidents()
+
+    def _seed_from_synthetic_incidents(self) -> List[Dict[str, Any]]:
+        """Decomposes resolved incidents from data/synthetic_incidents.json on fresh deployment."""
+        synthetic_file = DATA_DIR / "synthetic_incidents.json"
+        if not synthetic_file.exists():
+            return []
+        try:
+            from recallops.models.incident import Incident
+            from recallops.memory.memory_formatter import MemoryFormatter
+            with open(synthetic_file, "r", encoding="utf-8") as f:
+                incidents_raw = json.load(f)
+
+            memories = []
+            for inc_data in incidents_raw:
+                incident = Incident(**inc_data)
+                if incident.status != "RESOLVED":
+                    continue
+                units = MemoryFormatter.decompose_incident(incident)
+                for unit in units:
+                    memories.append({
+                        "document_id": unit.get("document_id"),
+                        "content": unit.get("content"),
+                        "metadata": unit.get("metadata", {}),
+                        "tags": unit.get("tags", []),
+                        "context": unit.get("context", ""),
+                    })
+
+            if memories:
+                logger.info(f"Dynamically generated {len(memories)} memory units from {synthetic_file}")
+                try:
+                    self.local_cache_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(self.local_cache_file, "w", encoding="utf-8") as out_f:
+                        json.dump(memories, out_f, indent=2)
+                except Exception:
+                    pass
+            return memories
+        except Exception as e:
+            logger.error(f"Error seeding from synthetic incidents: {e}")
+            return []
 
     def _save_local_cache(self):
         """Persists memories to local disk cache."""

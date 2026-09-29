@@ -1,0 +1,406 @@
+[
+  {
+    "document_id": "INC-101-ACTION-3",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-101 - Action ACT-101-3]:\nService: checkout-service\nAction Executed: Executed SELECT pg_terminate_backend(89104) and throttled coupon cron job\nHypothesis: Terminate runaway unindexed table scan holding exclusive row locks\nOutcome: SUCCESSFUL (\u2705 SUCCESSFUL RESOLUTION)\nObservable Effect: Active connection queue drained from 100 to 28; p99 latency returned to 210ms within 90 seconds\nContext: Symptoms were HTTP 504 Gateway Timeout on /api/v1/checkout/pay; p99 latency spiked from 180ms to 5400ms\n",
+    "metadata": {
+      "incident_id": "INC-101",
+      "action_id": "ACT-101-3",
+      "type": "action_experience",
+      "outcome": "SUCCESSFUL",
+      "service": "checkout-service",
+      "action_summary": "Executed SELECT pg_terminate_backend(89104) and throttled coupon cron job"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:successful",
+      "service:checkout-service",
+      "incident:INC-101"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-101-ACTION-4",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-101 - Action ACT-101-4]:\nService: checkout-service\nAction Executed: Scaled pods back to 4 and set max_connections per pod to 8 in checkout-service config\nHypothesis: Cap connection footprint per pod to prevent future database connection pool starvation\nOutcome: SUCCESSFUL (\u2705 SUCCESSFUL RESOLUTION)\nObservable Effect: Database connection ceiling maintained at 32 connections under full traffic\nContext: Symptoms were HTTP 504 Gateway Timeout on /api/v1/checkout/pay; p99 latency spiked from 180ms to 5400ms\n",
+    "metadata": {
+      "incident_id": "INC-101",
+      "action_id": "ACT-101-4",
+      "type": "action_experience",
+      "outcome": "SUCCESSFUL",
+      "service": "checkout-service",
+      "action_summary": "Scaled pods back to 4 and set max_connections per pod to 8 in checkout-service config"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:successful",
+      "service:checkout-service",
+      "incident:INC-101"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-101-POSTMORTEM",
+    "content": "INCIDENT POSTMORTEM [INC-101]: Postgres Connection Pool Exhaustion on Checkout Flow\nService: checkout-service\nSeverity: SEV-1 (Critical Outage)\nRecovery Time: 40 minutes\nObserved Symptoms: HTTP 504 Gateway Timeout on /api/v1/checkout/pay; p99 latency spiked from 180ms to 5400ms; checkout-service active DB connections hit pool maximum 100/100; Upstream ingress queue backlog grew to 1,200 pending requests\nKey Metrics: p99_latency_ms=5400.0ms (baseline 180.0ms); db_connection_utilization_pct=100.0% (baseline 35.0%); error_rate_pct=24.5% (baseline 0.05%)\nPreceding Triggers: deployment: Release v2.4.1 deployed 20 minutes prior with new discount eligibility logic\nRoot Cause: Release v2.4.1 introduced SELECT * FROM user_coupons WHERE code = $1 FOR UPDATE without an index on 'code'. Under concurrent checkouts, queries ran full sequential table scans and held row locks for >4500ms, completely saturating the PostgreSQL connection pool.\nFinal Resolution: Terminated blocking query PID 89104, scaled down extraneous pods, added compound index on (code, user_id), and enforced a 3s statement_timeout in the PostgreSQL connection string.\n",
+    "metadata": {
+      "incident_id": "INC-101",
+      "type": "postmortem",
+      "service": "checkout-service",
+      "status": "RESOLVED",
+      "root_cause_summary": "Release v2.4.1 introduced SELECT * FROM user_coupons WHERE code = $1 FOR UPDATE without an index on 'code'. Under concur..."
+    },
+    "tags": [
+      "postmortem",
+      "service:checkout-service",
+      "incident:INC-101",
+      "component:postgres-pool",
+      "component:pgbouncer",
+      "component:api-gateway"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-101-ACTION-1",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-101 - Action ACT-INC-101-1]:\nService: checkout-service\nAction Executed: Scaled pod deployment replicas\nHypothesis: Distribute CPU load\nOutcome: FAILED (\u274c FAILED / COUNTER-PRODUCTIVE)\nObservable Effect: Exhausted database connection pool; worsened latency to 8.2s\nContext: Symptoms were HTTP 504 Gateway Timeout on /api/v1/checkout/pay; p99 latency spiked from 180ms to 5400ms\n",
+    "metadata": {
+      "incident_id": "INC-101",
+      "action_id": "ACT-INC-101-1",
+      "type": "action_experience",
+      "outcome": "FAILED",
+      "service": "checkout-service",
+      "action_summary": "Scaled pod deployment replicas"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:failed",
+      "service:checkout-service",
+      "incident:INC-101"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-101-ACTION-2",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-101 - Action ACT-INC-101-2]:\nService: checkout-service\nAction Executed: Terminated blocking lock PID and capped per-pod pool connections\nHypothesis: Eliminate transaction lock contention\nOutcome: SUCCESSFUL (\u2705 SUCCESSFUL RESOLUTION)\nObservable Effect: Connection pool drained to 28; p99 latency normalized to 210ms in 90s\nContext: Symptoms were HTTP 504 Gateway Timeout on /api/v1/checkout/pay; p99 latency spiked from 180ms to 5400ms\n",
+    "metadata": {
+      "incident_id": "INC-101",
+      "action_id": "ACT-INC-101-2",
+      "type": "action_experience",
+      "outcome": "SUCCESSFUL",
+      "service": "checkout-service",
+      "action_summary": "Terminated blocking lock PID and capped per-pod pool connections"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:successful",
+      "service:checkout-service",
+      "incident:INC-101"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-101-LESSONS",
+    "content": "OPERATIONAL LESSONS & ANTI-PATTERNS [INC-101]:\nService: checkout-service\nLessons Learned:\n- Never scale out pods during database connection pool saturation.\n- Enforce statement_timeout on all currency calculation queries.\n- Add compound index on table row locks before deployment.\n",
+    "metadata": {
+      "incident_id": "INC-101",
+      "type": "lessons_learned",
+      "service": "checkout-service"
+    },
+    "tags": [
+      "lessons_learned",
+      "anti_pattern",
+      "service:checkout-service",
+      "incident:INC-101"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-102-POSTMORTEM",
+    "content": "INCIDENT POSTMORTEM [INC-102]: Redis Cache Stampede & Replica Saturation During Flash Sale\nService: inventory-service\nSeverity: SEV-2 (Major Degradation)\nRecovery Time: 39 minutes\nObserved Symptoms: HTTP 500 Internal Server Error rate 18.2% on /api/v1/inventory/stock; Redis cluster CPU utilization spiked to 99.4%; MySQL read replica replication lag spiked from 2ms to 42 seconds; Catalog stock status displaying 'Out of Stock' incorrectly to shoppers\nKey Metrics: error_rate_pct=18.2% (baseline 0.01%); redis_cpu_utilization_pct=99.4% (baseline 22.0%); replication_lag_seconds=42.0s (baseline 0.05s)\nPreceding Triggers: traffic_spike: Flash sale notification push sent to 450,000 mobile app users at 14:00 UTC\nRoot Cause: The top 3 flash sale SKUs were cached with fixed 300s TTL without randomized jitter. When the TTL expired at 14:05 UTC during peak traffic, 14,000 concurrent requests simultaneously missed cache and pounded the underlying MySQL read replica (thundering herd problem).\nFinal Resolution: Implemented singleflight request coalescing in the Go inventory service and injected randomized TTL jitter (+/- 25%) on all cache writes.\n",
+    "metadata": {
+      "incident_id": "INC-102",
+      "type": "postmortem",
+      "service": "inventory-service",
+      "status": "RESOLVED",
+      "root_cause_summary": "The top 3 flash sale SKUs were cached with fixed 300s TTL without randomized jitter. When the TTL expired at 14:05 UTC d..."
+    },
+    "tags": [
+      "postmortem",
+      "service:inventory-service",
+      "incident:INC-102",
+      "component:redis-cache",
+      "component:aurora-mysql-replica"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-102-ACTION-1",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-102 - Action ACT-102-1]:\nService: inventory-service\nAction Executed: Executed FLUSHDB on degraded Redis cache node to purge corrupted cache\nHypothesis: Believed Redis cache memory fragmentation or corrupted keys caused high CPU\nOutcome: FAILED (\u274c FAILED / COUNTER-PRODUCTIVE)\nObservable Effect: Flushing cache dumped 100% of read traffic directly onto MySQL database, crashing the read replica instantly\nContext: Symptoms were HTTP 500 Internal Server Error rate 18.2% on /api/v1/inventory/stock; Redis cluster CPU utilization spiked to 99.4%\n",
+    "metadata": {
+      "incident_id": "INC-102",
+      "action_id": "ACT-102-1",
+      "type": "action_experience",
+      "outcome": "FAILED",
+      "service": "inventory-service",
+      "action_summary": "Executed FLUSHDB on degraded Redis cache node to purge corrupted cache"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:failed",
+      "service:inventory-service",
+      "incident:INC-102"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-102-ACTION-2",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-102 - Action ACT-102-2]:\nService: inventory-service\nAction Executed: Applied emergency hotfix enabling singleflight request coalescing in inventory-service\nHypothesis: Ensure only 1 backend query hits database per cache miss, while concurrent requests await same promise\nOutcome: SUCCESSFUL (\u2705 SUCCESSFUL RESOLUTION)\nObservable Effect: MySQL query rate for hot SKUs plummeted from 14,000 QPS to 1 QPS; replica lag recovered in 3 minutes\nContext: Symptoms were HTTP 500 Internal Server Error rate 18.2% on /api/v1/inventory/stock; Redis cluster CPU utilization spiked to 99.4%\n",
+    "metadata": {
+      "incident_id": "INC-102",
+      "action_id": "ACT-102-2",
+      "type": "action_experience",
+      "outcome": "SUCCESSFUL",
+      "service": "inventory-service",
+      "action_summary": "Applied emergency hotfix enabling singleflight request coalescing in inventory-service"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:successful",
+      "service:inventory-service",
+      "incident:INC-102"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-102-LESSONS",
+    "content": "OPERATIONAL LESSONS & ANTI-PATTERNS [INC-102]:\nService: inventory-service\nLessons Learned:\n- CRITICAL ANTI-PATTERN: Never run FLUSHDB or flush cache clusters during high traffic spikes; it creates an immediate catastrophic database overload.\n- All cache keys for high-cardinality promotion items must employ TTL jitter and singleflight coalescing.\n- Configure circuit breakers between cache layer and MySQL read replica.\nRunbook Best Practices:\n- Check Redis hotkeys using: redis-cli --hotkeys\n- Monitor read replica thread pool status: SHOW PROCESSLIST;\n",
+    "metadata": {
+      "incident_id": "INC-102",
+      "type": "lessons_learned",
+      "service": "inventory-service"
+    },
+    "tags": [
+      "lessons_learned",
+      "anti_pattern",
+      "service:inventory-service",
+      "incident:INC-102"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-104-POSTMORTEM",
+    "content": "INCIDENT POSTMORTEM [INC-104]: Payment Webhook Thread Starvation & Queue Congestion\nService: payment-service\nSeverity: SEV-2 (Major Degradation)\nRecovery Time: 45 minutes\nObserved Symptoms: Stripe payment confirmations delayed by up to 2 hours; Stripe automated webhook delivery reporting 503 Service Unavailable; Pending webhook queue backlog exceeded 48,000 events; Customers reporting completed card charges but unfulfilled digital orders\nKey Metrics: webhook_backlog_count=48200.0events (baseline 15.0events); p99_latency_ms=8500.0ms (baseline 240.0ms)\nPreceding Triggers: scheduled_job: Monthly subscription billing run triggered 50,000 webhook events simultaneously\nRoot Cause: The webhook handler performed synchronous external ERP ledger reconciliation and PDF receipt generation before returning HTTP 200 to Stripe. When batch billing fired 50,000 events, worker threads starved and Stripe began exponential retries, multiplying traffic by 4x.\nFinal Resolution: Decoupled webhook ingestion from business processing: handlers now write raw payloads into an async queue and acknowledge with HTTP 200 immediately within <15ms.\n",
+    "metadata": {
+      "incident_id": "INC-104",
+      "type": "postmortem",
+      "service": "payment-service",
+      "status": "RESOLVED",
+      "root_cause_summary": "The webhook handler performed synchronous external ERP ledger reconciliation and PDF receipt generation before returning..."
+    },
+    "tags": [
+      "postmortem",
+      "service:payment-service",
+      "incident:INC-104",
+      "component:stripe-webhook-listener",
+      "component:celery-worker"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-104-ACTION-1",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-104 - Action ACT-INC-104-1]:\nService: payment-service\nAction Executed: Scaled pod deployment replicas\nHypothesis: Distribute CPU load\nOutcome: FAILED (\u274c FAILED / COUNTER-PRODUCTIVE)\nObservable Effect: Exhausted database connection pool; worsened latency to 8.2s\nContext: Symptoms were Stripe payment confirmations delayed by up to 2 hours; Stripe automated webhook delivery reporting 503 Service Unavailable\n",
+    "metadata": {
+      "incident_id": "INC-104",
+      "action_id": "ACT-INC-104-1",
+      "type": "action_experience",
+      "outcome": "FAILED",
+      "service": "payment-service",
+      "action_summary": "Scaled pod deployment replicas"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:failed",
+      "service:payment-service",
+      "incident:INC-104"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-104-ACTION-2",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-104 - Action ACT-INC-104-2]:\nService: payment-service\nAction Executed: Terminated blocking lock PID and capped per-pod pool connections\nHypothesis: Eliminate transaction lock contention\nOutcome: SUCCESSFUL (\u2705 SUCCESSFUL RESOLUTION)\nObservable Effect: Connection pool drained to 22%; p99 latency normalized to 210ms in 90s\nContext: Symptoms were Stripe payment confirmations delayed by up to 2 hours; Stripe automated webhook delivery reporting 503 Service Unavailable\n",
+    "metadata": {
+      "incident_id": "INC-104",
+      "action_id": "ACT-INC-104-2",
+      "type": "action_experience",
+      "outcome": "SUCCESSFUL",
+      "service": "payment-service",
+      "action_summary": "Terminated blocking lock PID and capped per-pod pool connections"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:successful",
+      "service:payment-service",
+      "incident:INC-104"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-104-LESSONS",
+    "content": "OPERATIONAL LESSONS & ANTI-PATTERNS [INC-104]:\nService: payment-service\nLessons Learned:\n- Never scale out pods during database connection pool saturation.\n- Enforce statement_timeout on all currency calculation queries.\n- Add compound index on table row locks before deployment.\n",
+    "metadata": {
+      "incident_id": "INC-104",
+      "type": "lessons_learned",
+      "service": "payment-service"
+    },
+    "tags": [
+      "lessons_learned",
+      "anti_pattern",
+      "service:payment-service",
+      "incident:INC-104"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-103-POSTMORTEM",
+    "content": "INCIDENT POSTMORTEM [INC-103]: Authentication Gateway Lockup due to Uncached External JWKS Fetch\nService: auth-service\nSeverity: SEV-1 (Critical Outage)\nRecovery Time: 34 minutes\nObserved Symptoms: HTTP 401 Unauthorized spikes on 92% of inbound API requests across all services; auth-service response latency exceeded 10,000ms; All downstream microservices failing token verification; auth-service container memory steadily climbed until OOMKilled\nKey Metrics: error_rate_pct=92.0% (baseline 0.02%); p99_latency_ms=10500.0ms (baseline 12.0ms)\nPreceding Triggers: dependency_outage: Third-party Identity Provider (Auth0) reported degraded latency in EU region\nRoot Cause: The JWT validation library had its in-memory key cache disabled due to an incorrect configuration flag in a recent config update. Every inbound API request initiated an outbound HTTPS call to download JWKS public keys. When the external IdP experienced latency, all auth worker threads hung.\nFinal Resolution: Enabled local persistent in-memory caching for JWKS public keys with stale-while-revalidate and a 24-hour local expiration.\n",
+    "metadata": {
+      "incident_id": "INC-103",
+      "type": "postmortem",
+      "service": "auth-service",
+      "status": "RESOLVED",
+      "root_cause_summary": "The JWT validation library had its in-memory key cache disabled due to an incorrect configuration flag in a recent confi..."
+    },
+    "tags": [
+      "postmortem",
+      "service:auth-service",
+      "incident:INC-103",
+      "component:jwt-verifier",
+      "component:api-gateway"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-103-ACTION-1",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-103 - Action ACT-INC-103-1]:\nService: auth-service\nAction Executed: Scaled pod deployment replicas\nHypothesis: Distribute CPU load\nOutcome: FAILED (\u274c FAILED / COUNTER-PRODUCTIVE)\nObservable Effect: Exhausted database connection pool; worsened latency to 8.2s\nContext: Symptoms were HTTP 401 Unauthorized spikes on 92% of inbound API requests across all services; auth-service response latency exceeded 10,000ms\n",
+    "metadata": {
+      "incident_id": "INC-103",
+      "action_id": "ACT-INC-103-1",
+      "type": "action_experience",
+      "outcome": "FAILED",
+      "service": "auth-service",
+      "action_summary": "Scaled pod deployment replicas"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:failed",
+      "service:auth-service",
+      "incident:INC-103"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-103-ACTION-2",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-103 - Action ACT-INC-103-2]:\nService: auth-service\nAction Executed: Terminated blocking lock PID and capped per-pod pool connections\nHypothesis: Eliminate transaction lock contention\nOutcome: SUCCESSFUL (\u2705 SUCCESSFUL RESOLUTION)\nObservable Effect: Connection pool drained to 22%; p99 latency normalized to 210ms in 90s\nContext: Symptoms were HTTP 401 Unauthorized spikes on 92% of inbound API requests across all services; auth-service response latency exceeded 10,000ms\n",
+    "metadata": {
+      "incident_id": "INC-103",
+      "action_id": "ACT-INC-103-2",
+      "type": "action_experience",
+      "outcome": "SUCCESSFUL",
+      "service": "auth-service",
+      "action_summary": "Terminated blocking lock PID and capped per-pod pool connections"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:successful",
+      "service:auth-service",
+      "incident:INC-103"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-103-LESSONS",
+    "content": "OPERATIONAL LESSONS & ANTI-PATTERNS [INC-103]:\nService: auth-service\nLessons Learned:\n- Never scale out pods during database connection pool saturation.\n- Enforce statement_timeout on all currency calculation queries.\n- Add compound index on table row locks before deployment.\n",
+    "metadata": {
+      "incident_id": "INC-103",
+      "type": "lessons_learned",
+      "service": "auth-service"
+    },
+    "tags": [
+      "lessons_learned",
+      "anti_pattern",
+      "service:auth-service",
+      "incident:INC-103"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-105-POSTMORTEM",
+    "content": "INCIDENT POSTMORTEM [INC-105]: P99 Latency Surge & 504 Timeouts on Checkout API Post-Release\nService: checkout-service\nSeverity: SEV-1 (Critical Outage)\nRecovery Time: 24 minutes\nObserved Symptoms: HTTP 504 Gateway Timeouts rising rapidly on /api/v1/checkout/finalize; checkout-service p99 latency spiked from 195ms to 4900ms; Postgres connection pool queue count steadily growing (currently 88/100 active connections); Customer cart abandonments up 340% in last 15 minutes\nKey Metrics: p99_latency_ms=4900.0ms (baseline 195.0ms); db_connection_utilization_pct=88.0% (baseline 30.0%); error_rate_pct=19.8% (baseline 0.08%)\nPreceding Triggers: deployment: Release v2.4.5 deployed 14 minutes ago with new multi-currency checkout calculation\nRoot Cause: Release v2.4.5 multi-currency calculation held exclusive row locks on exchange_rates table without compound index.\nFinal Resolution: Terminated query PID 91204, added migration index on (currency, effective_date), and adjusted statement_timeout to 3s.\n",
+    "metadata": {
+      "incident_id": "INC-105",
+      "type": "postmortem",
+      "service": "checkout-service",
+      "status": "RESOLVED",
+      "root_cause_summary": "Release v2.4.5 multi-currency calculation held exclusive row locks on exchange_rates table without compound index."
+    },
+    "tags": [
+      "postmortem",
+      "service:checkout-service",
+      "incident:INC-105",
+      "component:postgres-pool",
+      "component:checkout-api"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-105-ACTION-1",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-105 - Action ACT-INC-105-1]:\nService: checkout-service\nAction Executed: Scaled pod deployment replicas\nHypothesis: Distribute CPU load\nOutcome: FAILED (\u274c FAILED / COUNTER-PRODUCTIVE)\nObservable Effect: Exhausted database connection pool; worsened latency to 8.2s\nContext: Symptoms were HTTP 504 Gateway Timeouts rising rapidly on /api/v1/checkout/finalize; checkout-service p99 latency spiked from 195ms to 4900ms\n",
+    "metadata": {
+      "incident_id": "INC-105",
+      "action_id": "ACT-INC-105-1",
+      "type": "action_experience",
+      "outcome": "FAILED",
+      "service": "checkout-service",
+      "action_summary": "Scaled pod deployment replicas"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:failed",
+      "service:checkout-service",
+      "incident:INC-105"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-105-ACTION-2",
+    "content": "INCIDENT ACTION EXPERIENCE [INC-105 - Action ACT-INC-105-2]:\nService: checkout-service\nAction Executed: Terminated blocking lock PID and capped per-pod pool connections\nHypothesis: Eliminate transaction lock contention\nOutcome: SUCCESSFUL (\u2705 SUCCESSFUL RESOLUTION)\nObservable Effect: Connection pool drained to 22%; p99 latency normalized to 210ms in 90s\nContext: Symptoms were HTTP 504 Gateway Timeouts rising rapidly on /api/v1/checkout/finalize; checkout-service p99 latency spiked from 195ms to 4900ms\n",
+    "metadata": {
+      "incident_id": "INC-105",
+      "action_id": "ACT-INC-105-2",
+      "type": "action_experience",
+      "outcome": "SUCCESSFUL",
+      "service": "checkout-service",
+      "action_summary": "Terminated blocking lock PID and capped per-pod pool connections"
+    },
+    "tags": [
+      "action_experience",
+      "outcome:successful",
+      "service:checkout-service",
+      "incident:INC-105"
+    ],
+    "context": ""
+  },
+  {
+    "document_id": "INC-105-LESSONS",
+    "content": "OPERATIONAL LESSONS & ANTI-PATTERNS [INC-105]:\nService: checkout-service\nLessons Learned:\n- Never scale out pods during database connection pool saturation.\n- Enforce statement_timeout on all currency calculation queries.\n- Add compound index on table row locks before deployment.\n- Implement Redis caching for frequently queried exchange rate rows.\n",
+    "metadata": {
+      "incident_id": "INC-105",
+      "type": "lessons_learned",
+      "service": "checkout-service"
+    },
+    "tags": [
+      "lessons_learned",
+      "anti_pattern",
+      "service:checkout-service",
+      "incident:INC-105"
+    ],
+    "context": ""
+  }
+]

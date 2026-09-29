@@ -610,6 +610,10 @@ def get_adapters():
 
 mem_adapter, inc_manager, agent, llm = get_adapters()
 
+# Self-healing check: Ensure memory bank is populated even on fresh cloud containers
+if mem_adapter.get_stats().get("total_memories", 0) == 0:
+    mem_adapter.reload_cache()
+
 # Session State Management
 if "nav_tab" not in st.session_state:
     st.session_state["nav_tab"] = "Overview"
@@ -1571,6 +1575,8 @@ elif st.session_state["nav_tab"] == "Settings":
         if st.button("Re-Seed Memory Bank Baseline", use_container_width=True):
             from seed_memory import seed_memory_bank
             seed_memory_bank()
-            st.success("Re-seeded memory bank baseline.")
+            st.cache_resource.clear()
+            mem_adapter.reload_cache()
+            st.success("Re-seeded memory bank baseline successfully!")
             st.rerun()
         st.caption("Re-uploads historical incident postmortems, action outcomes, and runbook patterns from data/synthetic_incidents.json into your Hindsight Cloud vault.")

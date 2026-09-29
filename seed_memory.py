@@ -64,6 +64,16 @@ def seed_memory_bank(force_reset: bool = False):
 
     console.print(table)
     console.print(f"\n[bold green]Successfully retained {total_units} cognitive memory units into Hindsight![/bold green]")
+    
+    # Also save to data/baseline_memory_bank.json for cloud deployments
+    baseline_path = Path(__file__).parent / "data" / "baseline_memory_bank.json"
+    try:
+        with open(baseline_path, "w", encoding="utf-8") as f:
+            json.dump(adapter.list_all_memories(), f, indent=2)
+        console.print(f"[bold cyan]Updated baseline memory file at {baseline_path}[/bold cyan]")
+    except Exception as e:
+        console.print(f"[yellow]Could not update baseline file: {e}[/yellow]")
+
     stats = adapter.get_stats()
     console.print(f"Current Memory Bank Stats: {stats}\n")
 
