@@ -64,52 +64,59 @@ class LLMClient:
         """Provides high-quality SRE analysis if LLM credentials are not yet entered."""
         if "WITHOUT_MEMORY" in prompt or "Cold Start" in prompt:
             return json.dumps({
-                "status_summary": "General API degradation detected on checkout-service with elevated p99 latency and 504 status codes.",
+                "status_summary": "Service degradation detected on checkout-service. Elevated p99 latency (4.9s) and 504 timeouts coincide with recent release v2.4.5 and high database connection pool utilization (88%).",
                 "hypotheses": [
                     {
                         "rank": 1,
-                        "title": "Compute Resource Exhaustion",
-                        "description": "Traffic volume may have exceeded existing pod capacity, causing CPU throttling.",
+                        "title": "Database Connection Pool Saturation",
+                        "description": "Active connections are at 88% of ceiling vs 30% baseline. High query latency may be holding connections open.",
                         "confidence": "MEDIUM",
-                        "supporting_evidence": ["Elevated latency", "High request arrival rate"],
+                        "supporting_evidence": ["Database connection utilization at 88%", "p99 latency 4.9s vs 195ms baseline"],
                         "citations": []
                     },
                     {
                         "rank": 2,
-                        "title": "Downstream Gateway Timeout",
-                        "description": "Network timeout threshold on upstream ingress may be too aggressive.",
-                        "confidence": "LOW",
-                        "supporting_evidence": ["504 Gateway Timeout status"],
+                        "title": "Recent Deployment Regression",
+                        "description": "Release v2.4.5 was deployed 14 minutes prior and may have introduced unoptimized database interactions or connection leaks.",
+                        "confidence": "MEDIUM",
+                        "supporting_evidence": ["Deployment timestamp directly correlates with latency spike"],
                         "citations": []
                     }
                 ],
                 "actions_to_avoid": [],
                 "next_checks": [
                     {
-                        "check_name": "Check Pod CPU and Memory",
-                        "command_or_query": "kubectl top pods -l app=checkout-service",
-                        "target_component": "kubernetes-nodes",
-                        "rationale": "Verify if containers are throttling or hitting memory limits.",
+                        "check_name": "Inspect Database Connection Utilization",
+                        "command_or_query": "SHOW max_connections; SELECT count(*) FROM pg_stat_activity;",
+                        "target_component": "database-pool",
+                        "rationale": "Verify active connection count against hard configured maximums.",
                         "is_safe_read_only": True
                     },
                     {
-                        "check_name": "Check Ingress Logs",
+                        "check_name": "Inspect Recent Release Commit & Config",
+                        "command_or_query": "git log -n 1 --stat",
+                        "target_component": "git-repository",
+                        "rationale": "Review recent code and configuration changes introduced in release v2.4.5.",
+                        "is_safe_read_only": True
+                    },
+                    {
+                        "check_name": "Inspect Ingress Gateway Logs",
                         "command_or_query": "kubectl logs -l app=ingress-nginx --tail=100 | grep 504",
                         "target_component": "ingress-controller",
-                        "rationale": "Identify which upstream endpoint is failing to return.",
+                        "rationale": "Identify specific failing URI endpoints and upstream response times.",
                         "is_safe_read_only": True
                     }
                 ],
                 "proposed_mitigations": [
                     {
-                        "mitigation_step": "Scale out checkout-service replicas from 4 to 12 pods",
+                        "mitigation_step": "Consider deployment rollback to v2.4.4 if database saturation correlates with the new release",
                         "confidence": "MEDIUM",
                         "historical_precedent": None,
                         "risk_level": "MEDIUM",
                         "requires_human_approval": True
                     },
                     {
-                        "mitigation_step": "Restart active service pods via rollout restart",
+                        "mitigation_step": "Temporarily restart degraded service pods to clear hanging connections",
                         "confidence": "LOW",
                         "historical_precedent": None,
                         "risk_level": "LOW",

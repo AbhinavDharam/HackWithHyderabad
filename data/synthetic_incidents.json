@@ -395,18 +395,18 @@
     "actions_attempted": [
       {
         "action_id": "ACT-INC-105-1",
-        "timestamp": "2026-09-29T09:59:44Z",
-        "action_taken": "Attempted pod restart via rollout restart",
-        "hypothesis": "Reset stuck connections",
-        "outcome": "INEFFECTIVE",
-        "observable_effect": "Pods restarted but connection queue immediately hit 100/100 again",
+        "timestamp": "2026-09-29T10:12:22Z",
+        "action_taken": "Scaled pod deployment replicas",
+        "hypothesis": "Distribute CPU load",
+        "outcome": "FAILED",
+        "observable_effect": "Exhausted database connection pool; worsened latency",
         "actor": "@oncall-engineer"
       },
       {
         "action_id": "ACT-INC-105-2",
-        "timestamp": "2026-09-29T09:59:44Z",
-        "action_taken": "Killed locking PID 91204 and capped pool to 8 per pod",
-        "hypothesis": "Eliminate lock contention",
+        "timestamp": "2026-09-29T10:12:22Z",
+        "action_taken": "Terminated blocking lock PID and capped per-pod pool connections",
+        "hypothesis": "Eliminate transaction lock contention",
         "outcome": "SUCCESSFUL",
         "observable_effect": "Connection pool drained to 22%; p99 latency normalized to 180ms",
         "actor": "@lead-sre"
@@ -416,8 +416,9 @@
     "final_resolution": "Terminated query PID 91204, added migration index on (currency, effective_date), and adjusted statement_timeout to 3s.",
     "recovery_time_minutes": 24,
     "lessons_learned": [
-      "Enforce statement_timeout on all exchange rate queries.",
-      "Never scale out pods during database lock contention."
+      "Never scale out pods during database connection saturation.",
+      "Enforce statement_timeout on all currency calculation queries.",
+      "Add compound index on table row locks before deployment."
     ],
     "runbook_recommendations": []
   }

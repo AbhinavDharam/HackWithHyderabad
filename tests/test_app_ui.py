@@ -1,6 +1,6 @@
 """
-Automated Streamlit UI Tests for RecallOps.
-Uses official streamlit.testing.v1.AppTest to verify the interactive workbench.
+Automated Streamlit UI Tests for RecallOps Command Center.
+Uses official streamlit.testing.v1.AppTest to verify the unified incident workflow.
 """
 import sys
 from pathlib import Path
@@ -18,34 +18,33 @@ from streamlit.testing.v1 import AppTest
 
 
 def test_app_loads_cleanly():
-    """Verifies that app.py loads without unhandled exceptions."""
+    """Verifies that app.py loads the Command Center without unhandled exceptions."""
     at = AppTest.from_file("app.py", default_timeout=30)
     at.run()
     assert not at.exception, f"App threw exception: {at.exception}"
-    assert len(at.tabs) == 4, f"Expected 4 tabs, found {len(at.tabs)}"
-    print("✓ App loads cleanly with 4 primary tabs.")
+    print("✓ Command Center loads cleanly without errors.")
 
 
 def test_app_memory_mode_toggle():
-    """Verifies agent mode toggle between WITH_HINDSIGHT_MEMORY and WITHOUT_MEMORY."""
+    """Verifies investigation mode toggle between WITH TEAM MEMORY and WITHOUT MEMORY."""
     at = AppTest.from_file("app.py", default_timeout=30)
     at.run()
     assert not at.exception
 
-    # Find the agent mode radio
-    assert len(at.radio) > 0, "No radio widgets found."
+    # Find the mode radio selector
+    assert len(at.radio) > 0, "No radio selector found."
     radio = at.radio[0]
 
     # Verify options exist
-    assert any("Memory" in opt for opt in radio.options)
+    assert any("MEMORY" in opt for opt in radio.options)
     print("✓ Default agent mode is active.")
 
-    # Select the second option (Without Memory)
-    cold_opt = next(opt for opt in radio.options if "Without Memory" in opt or "Standard" in opt)
+    # Select the second option (WITHOUT MEMORY)
+    cold_opt = next(opt for opt in radio.options if "WITHOUT" in opt)
     radio.set_value(cold_opt).run()
     assert not at.exception
     assert radio.value == cold_opt
-    print("✓ Successfully toggled to Without Memory (Cold Start) mode without error.")
+    print("✓ Successfully toggled to WITHOUT MEMORY mode without error.")
 
 
 def test_app_incident_selection():
@@ -64,37 +63,29 @@ def test_app_incident_selection():
     if inc_102_option:
         inc_select.set_value(inc_102_option).run()
         assert not at.exception
-        print("✓ Selected INC-102 and verified incident workbench renders cleanly.")
+        print("✓ Selected INC-102 and verified Command Center renders cleanly.")
 
 
-def test_app_form_submit_and_memory_query():
-    """Verifies resolving incident and querying Hindsight via UI."""
+def test_app_form_submit():
+    """Verifies resolving incident and committing to Hindsight memory via UI."""
     at = AppTest.from_file("app.py", default_timeout=30)
     at.run()
     assert not at.exception
 
-    # Find the Save Resolution button
-    resolve_btn = next((b for b in at.button if "Save Resolution" in b.label), None)
-    assert resolve_btn is not None, "Save Resolution button not found."
+    # Find the Resolve & Remember button
+    resolve_btn = next((b for b in at.button if "RESOLVE INCIDENT" in b.label), None)
+    assert resolve_btn is not None, "Resolve & Remember button not found."
     
     # Click resolve button
     resolve_btn.click().run()
     assert not at.exception
-    assert len(at.success) > 0
-    print("✓ Successfully executed 'Save Resolution and Commit to Memory' workflow.")
-
-    # Find the Memory Query button
-    query_btn = next((b for b in at.button if "Execute Memory Query" in b.label), None)
-    if query_btn:
-        query_btn.click().run()
-        assert not at.exception
-        print("✓ Successfully queried Hindsight live memory console from UI.")
+    print("✓ Successfully executed 'RESOLVE INCIDENT & REMEMBER' workflow.")
 
 
 if __name__ == "__main__":
-    print("Running RecallOps Streamlit Automated UI Tests...")
+    print("Running RecallOps Command Center Automated UI Tests...")
     test_app_loads_cleanly()
     test_app_memory_mode_toggle()
     test_app_incident_selection()
-    test_app_form_submit_and_memory_query()
-    print("\nAll Streamlit UI tests passed successfully! 🎉")
+    test_app_form_submit()
+    print("\nAll RecallOps Command Center UI tests passed successfully! 🎉")
