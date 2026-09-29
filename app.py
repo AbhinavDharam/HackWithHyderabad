@@ -701,25 +701,35 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.write("")
-    with st.expander("API Keys & Hindsight Integration", expanded=False):
+    with st.expander("API Keys & Integrations", expanded=False):
+        has_gemini = bool(os.getenv("GEMINI_API_KEY", ""))
         has_groq = bool(llm.groq_client)
         has_hs_cloud = bool(mem_adapter.client)
         
-        st.markdown(f"**Groq LLM:** {'🟢 Connected (Live)' if has_groq else '🟡 Fallback Engine'}")
-        input_groq = st.text_input("Groq API Key:", value=os.getenv("GROQ_API_KEY", ""), type="password", placeholder="gsk_...", help="From https://console.groq.com")
+        provider_label = "🟢 Google Gemini (Live)" if has_gemini else ("🟢 Groq Llama-3.3 (Live)" if has_groq else "🟡 Deterministic SRE Engine")
+        st.markdown(f"**LLM Engine:** {provider_label}")
+        
+        input_gemini = st.text_input("Gemini API Key:", value=os.getenv("GEMINI_API_KEY", ""), type="password", placeholder="AQ.Ab8...", help="Google Gemini Flash API Key")
+        if input_gemini and input_gemini != os.getenv("GEMINI_API_KEY", ""):
+            os.environ["GEMINI_API_KEY"] = input_gemini
+            st.cache_resource.clear()
+            st.rerun()
+
+        input_groq = st.text_input("Groq API Key (Optional):", value=os.getenv("GROQ_API_KEY", ""), type="password", placeholder="gsk_...", help="From https://console.groq.com")
         if input_groq and input_groq != os.getenv("GROQ_API_KEY", ""):
             os.environ["GROQ_API_KEY"] = input_groq
             st.cache_resource.clear()
             st.rerun()
 
-        st.markdown(f"**Hindsight Memory:** {'🟢 Cloud Connected' if has_hs_cloud else '🟢 Local Vault (18 records)'}")
-        input_hs = st.text_input("Hindsight API Key:", value=os.getenv("HINDSIGHT_API_KEY", ""), type="password", placeholder="hs_...", help="From https://ui.hindsight.vectorize.io (Promo: MEMHACK99)")
+        hs_status = "🟢 Hindsight Cloud Online" if has_hs_cloud else "🟢 Local Vault Online (18 records)"
+        st.markdown(f"**Hindsight Memory:** {hs_status}")
+        input_hs = st.text_input("Hindsight API Key:", value=os.getenv("HINDSIGHT_API_KEY", ""), type="password", placeholder="hsk_...", help="From https://ui.hindsight.vectorize.io")
         if input_hs and input_hs != os.getenv("HINDSIGHT_API_KEY", ""):
             os.environ["HINDSIGHT_API_KEY"] = input_hs
             st.cache_resource.clear()
             st.rerun()
             
-        st.caption(f"Bank ID: `{stats['bank_id']}` | Model: `{GROQ_MODEL}`")
+        st.caption(f"Bank ID: `{stats['bank_id']}` | Active LLM: `{llm.get_provider_name()}`")
         if st.button("Reset Baseline Memory", use_container_width=True):
             from seed_memory import seed_memory_bank
             seed_memory_bank()

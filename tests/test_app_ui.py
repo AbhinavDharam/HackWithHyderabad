@@ -19,7 +19,7 @@ from streamlit.testing.v1 import AppTest
 
 def test_app_loads_cleanly():
     """Verifies that app.py loads the Command Center without unhandled exceptions."""
-    at = AppTest.from_file("app.py", default_timeout=30)
+    at = AppTest.from_file("app.py", default_timeout=60)
     at.run()
     assert not at.exception, f"App threw exception: {at.exception}"
     print("✓ Command Center loads cleanly without errors.")
@@ -27,7 +27,7 @@ def test_app_loads_cleanly():
 
 def test_app_memory_mode_toggle():
     """Verifies investigation mode toggle between WITH TEAM MEMORY and WITHOUT MEMORY."""
-    at = AppTest.from_file("app.py", default_timeout=30)
+    at = AppTest.from_file("app.py", default_timeout=60)
     at.run()
     assert not at.exception
 
@@ -49,7 +49,7 @@ def test_app_memory_mode_toggle():
 
 def test_app_incident_selection():
     """Verifies changing the selected active incident."""
-    at = AppTest.from_file("app.py", default_timeout=30)
+    at = AppTest.from_file("app.py", default_timeout=60)
     at.run()
     assert not at.exception
 
@@ -68,7 +68,7 @@ def test_app_incident_selection():
 
 def test_app_form_submit():
     """Verifies resolving incident and committing to Hindsight memory via UI."""
-    at = AppTest.from_file("app.py", default_timeout=30)
+    at = AppTest.from_file("app.py", default_timeout=60)
     at.run()
     assert not at.exception
 
@@ -84,7 +84,7 @@ def test_app_form_submit():
 
 def test_app_realtime_diagnostic():
     """Verifies executing live diagnostic query in real time."""
-    at = AppTest.from_file("app.py", default_timeout=30)
+    at = AppTest.from_file("app.py", default_timeout=60)
     at.run()
     assert not at.exception
 

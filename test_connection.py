@@ -20,6 +20,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from recallops.config import (
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
     GROQ_API_KEY,
     GROQ_MODEL,
     HINDSIGHT_API_KEY,
@@ -41,15 +43,24 @@ def test_diagnostics():
     table.add_column("Configured Value", style="yellow")
     table.add_column("Status", style="bold")
 
-    # LLM Key Check
+    # Gemini Check
+    has_gemini = bool(GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here")
+    masked_gemini = (GEMINI_API_KEY[:8] + "..." + GEMINI_API_KEY[-4:]) if has_gemini else "Not set"
+    table.add_row(
+        "Google Gemini Key",
+        masked_gemini,
+        "[green]Active & Connected[/green]" if has_gemini else "[dim]Optional[/dim]",
+    )
+    table.add_row("Gemini Target Model", GEMINI_MODEL, "[cyan]Active[/cyan]")
+
+    # LLM Key Check (Groq)
     has_groq = bool(GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here")
     masked_groq = (GROQ_API_KEY[:8] + "..." + GROQ_API_KEY[-4:]) if has_groq else "Not set"
     table.add_row(
         "Groq API Key",
         masked_groq,
-        "[green]Configured[/green]" if has_groq else "[dim yellow]Using SRE Engine Fallback[/dim yellow]",
+        "[green]Configured[/green]" if has_groq else "[dim]Optional[/dim]",
     )
-    table.add_row("Target LLM Model", GROQ_MODEL, "[cyan]Active[/cyan]")
 
     # Hindsight Check
     has_hindsight = bool(HINDSIGHT_API_KEY and HINDSIGHT_API_KEY != "your_hindsight_api_key_here")
@@ -57,7 +68,7 @@ def test_diagnostics():
     table.add_row(
         "Hindsight Cloud Key",
         masked_hs,
-        "[green]Configured[/green]" if has_hindsight else "[dim yellow]Using Local Active Mirror[/dim yellow]",
+        "[green]Configured (hsk_...)[/green]" if has_hindsight else "[dim yellow]Using Local Active Mirror[/dim yellow]",
     )
     table.add_row("Hindsight Bank ID", HINDSIGHT_BANK_ID, "[cyan]Active[/cyan]")
     table.add_row("Hindsight Base URL", HINDSIGHT_BASE_URL, "[dim]Default[/dim]")

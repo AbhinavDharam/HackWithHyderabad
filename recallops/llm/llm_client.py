@@ -6,7 +6,9 @@ import os
 import json
 import logging
 from typing import Optional, Dict, Any, List
-from recallops.config import GROQ_API_KEY, GROQ_MODEL, OPENAI_API_KEY
+import urllib.request
+import urllib.error
+from recallops.config import GROQ_API_KEY, GROQ_MODEL, OPENAI_API_KEY, GEMINI_API_KEY, GEMINI_MODEL
 
 logger = logging.getLogger("recallops.llm")
 
@@ -21,6 +23,8 @@ class LLMClient:
     """Wrapper for high-speed LLM generation with fallback safety."""
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        self.gemini_key = os.getenv("GEMINI_API_KEY", GEMINI_API_KEY)
+        self.gemini_model = os.getenv("GEMINI_MODEL", GEMINI_MODEL)
         self.groq_key = api_key or os.getenv("GROQ_API_KEY", GROQ_API_KEY)
         self.openai_key = os.getenv("OPENAI_API_KEY", OPENAI_API_KEY)
         self.model = model or os.getenv("GROQ_MODEL", GROQ_MODEL)
@@ -35,11 +39,33 @@ class LLMClient:
 
     def is_live_llm_ready(self) -> bool:
         """Returns True if a live LLM API is configured."""
-        return self.groq_client is not None or bool(self.openai_key)
+        return bool(self.gemini_key) or self.groq_client is not None or bool(self.openai_key)
+
+    def get_provider_name(self) -> str:
+        if self.gemini_key:
+            return f"Google Gemini ({self.gemini_model})"
+        if self.groq_client:
+            return f"Groq ({self.model})"
+        return "Deterministic SRE Engine"
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None, max_tokens: int = 1500) -> str:
-        """Generates LLM response."""
-        # 1. Try Groq
+        """Generates LLM response using Gemini, Groq, or SRE deterministic fallback."""
+        # 1. Try Google Gemini
+        if self.gemini_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_key}"
+                full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+                payload = json.dumps({"contents": [{"parts": [{"text": full_prompt}]}]}).encode("utf-8")
+                req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    res = json.loads(resp.read().decode("utf-8"))
+                    text = res["candidates"][0]["content"]["parts"][0]["text"]
+                    if text:
+                        return text
+            except Exception as e:
+                logger.warning(f"Gemini API call failed: {e}. Falling back to Groq or deterministic engine.")
+
+        # 2. Try Groq
         if self.groq_client:
             try:
                 messages = []
@@ -57,7 +83,7 @@ class LLMClient:
             except Exception as e:
                 logger.warning(f"Groq API call error: {e}. Falling back to SRE synthesis engine.")
 
-        # 2. Local SRE reasoning fallback (Deterministic synthesis)
+        # 3. Local SRE reasoning fallback (Deterministic synthesis)
         return self._deterministic_sre_fallback(prompt)
 
     def _deterministic_sre_fallback(self, prompt: str) -> str:

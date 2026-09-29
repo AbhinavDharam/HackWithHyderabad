@@ -104,6 +104,7 @@ class HindsightAdapter:
                     metadata=metadata,
                     tags=tags,
                     context=context,
+                    retain_async=True,
                 )
                 logger.info(f"Successfully retained {document_id} into Hindsight bank {self.bank_id}")
                 return True
