@@ -599,20 +599,31 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# Initialize Adapters & Services
-@st.cache_resource
-def get_adapters():
-    mem_adapter = HindsightAdapter()
-    inc_manager = IncidentManager(memory_adapter=mem_adapter)
-    llm = LLMClient()
-    agent = SREAgent(memory_adapter=mem_adapter, llm_client=llm)
-    return mem_adapter, inc_manager, agent, llm
+# Initialize Adapters & Services in session_state for isolated demo resilience
+if "mem_adapter" not in st.session_state or st.session_state.get("mem_adapter") is None:
+    st.session_state["mem_adapter"] = HindsightAdapter()
+elif st.session_state["mem_adapter"].get_stats().get("total_memories", 0) == 0:
+    if hasattr(st.session_state["mem_adapter"], "reload_cache"):
+        st.session_state["mem_adapter"].reload_cache()
+    else:
+        st.session_state["mem_adapter"] = HindsightAdapter()
 
-mem_adapter, inc_manager, agent, llm = get_adapters()
+if "inc_manager" not in st.session_state:
+    st.session_state["inc_manager"] = IncidentManager(memory_adapter=st.session_state["mem_adapter"])
 
-# Self-healing check: Ensure memory bank is populated even on fresh cloud containers
-if mem_adapter.get_stats().get("total_memories", 0) == 0:
-    mem_adapter.reload_cache()
+if "llm" not in st.session_state:
+    st.session_state["llm"] = LLMClient()
+
+if "agent" not in st.session_state:
+    st.session_state["agent"] = SREAgent(
+        memory_adapter=st.session_state["mem_adapter"],
+        llm_client=st.session_state["llm"]
+    )
+
+mem_adapter = st.session_state["mem_adapter"]
+inc_manager = st.session_state["inc_manager"]
+agent = st.session_state["agent"]
+llm = st.session_state["llm"]
 
 # Session State Management
 if "nav_tab" not in st.session_state:
@@ -1575,8 +1586,10 @@ elif st.session_state["nav_tab"] == "Settings":
         if st.button("Re-Seed Memory Bank Baseline", use_container_width=True):
             from seed_memory import seed_memory_bank
             seed_memory_bank()
-            st.cache_resource.clear()
-            mem_adapter.reload_cache()
+            new_mem = HindsightAdapter()
+            st.session_state["mem_adapter"] = new_mem
+            st.session_state["inc_manager"] = IncidentManager(memory_adapter=new_mem)
+            st.session_state["agent"] = SREAgent(memory_adapter=new_mem, llm_client=st.session_state["llm"])
             st.success("Re-seeded memory bank baseline successfully!")
             st.rerun()
         st.caption("Re-uploads historical incident postmortems, action outcomes, and runbook patterns from data/synthetic_incidents.json into your Hindsight Cloud vault.")
