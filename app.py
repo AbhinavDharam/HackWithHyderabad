@@ -50,8 +50,33 @@ st.markdown("""
     
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stDeployButton {display:none;}
+    .stDeployButton {display:none !important;}
+    
+    /* Transparent header so sidebar toggle control is always visible and accessible */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+        height: 2.5rem !important;
+    }
+    
+    /* Ensure the sidebar reopen/collapse arrow toggle is always visible and clickable */
+    button[data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"] {
+        visibility: visible !important;
+        display: flex !important;
+        color: #f1f5f9 !important;
+        background: #0f172a !important;
+        border: 1px solid #1e293b !important;
+        border-radius: 6px !important;
+        z-index: 100000 !important;
+    }
+    button[data-testid="stSidebarCollapsedControl"]:hover,
+    [data-testid="collapsedControl"]:hover,
+    [data-testid="stSidebarCollapseButton"]:hover {
+        background: #1e293b !important;
+        color: #38bdf8 !important;
+        border-color: #38bdf8 !important;
+    }
     
     .block-container {
         padding-top: 1.0rem;
