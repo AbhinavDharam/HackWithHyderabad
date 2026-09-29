@@ -1,6 +1,6 @@
 """
 RecallOps: Incident Command Center
-Operational Incident Response Engine with Hindsight Persistent Memory
+Enterprise Operational Incident Response Engine powered by Hindsight Persistent Memory
 """
 import streamlit as st
 import json
@@ -14,213 +14,555 @@ from recallops.llm.llm_client import LLMClient
 
 # Page Configuration
 st.set_page_config(
-    page_title="RecallOps — Incident Command",
+    page_title="RecallOps — Enterprise Incident Command",
     page_icon="assets/logo.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Dark Technical SaaS Theme (High contrast, professional, human-centric)
+# High-End Enterprise SRE Theme (Datadog / Rootly / Linear Aesthetic)
 st.markdown("""
 <style>
-    /* Global Container Styles */
+    /* Global Base */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    
     .stApp {
-        background-color: #0b0f19;
+        background-color: #070b14;
         color: #f1f5f9;
     }
     
-    /* Top Navigation Bar */
-    .top-nav {
+    /* Hide Streamlit default clutter */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display:none;}
+    
+    .block-container {
+        padding-top: 1.2rem;
+        padding-bottom: 3.5rem;
+        max-width: 1420px;
+    }
+
+    /* Enterprise Navigation Header */
+    .cmd-header {
+        background: linear-gradient(180deg, #0e1626 0%, #0a0f1d 100%);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        padding: 14px 20px;
+        margin-bottom: 20px;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 10px 0 16px 0;
-        border-bottom: 1px solid #1e293b;
-        margin-bottom: 24px;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
     }
-    .brand-title {
-        font-size: 20px;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-        color: #f8fafc;
+    .cmd-brand {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 12px;
     }
-    .brand-subtitle {
-        font-size: 13px;
-        color: #94a3b8;
-        font-weight: 400;
-        margin-left: 8px;
+    .cmd-title {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        color: #ffffff;
     }
-    .status-badge {
-        display: inline-block;
-        padding: 3px 9px;
-        border-radius: 4px;
+    .cmd-tag {
         font-size: 11px;
         font-weight: 600;
-        letter-spacing: 0.3px;
         text-transform: uppercase;
-    }
-    .badge-prod {
-        background-color: #1e293b;
-        color: #94a3b8;
-        border: 1px solid #334155;
-    }
-    .badge-memory-active {
-        background-color: rgba(14, 165, 233, 0.15);
+        letter-spacing: 0.8px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: rgba(56, 189, 248, 0.12);
         color: #38bdf8;
-        border: 1px solid #0284c7;
+        border: 1px solid rgba(56, 189, 248, 0.3);
     }
-    
-    /* User-Centric Section Headers */
-    .section-header {
-        font-size: 18px;
+    .cmd-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .live-pulse {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
         font-weight: 700;
-        color: #f8fafc;
-        letter-spacing: -0.3px;
-        margin: 28px 0 6px 0;
+        color: #f87171;
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        padding: 3px 10px;
+        border-radius: 20px;
+        letter-spacing: 0.3px;
+    }
+    .pulse-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #ef4444;
+        box-shadow: 0 0 8px #ef4444;
+    }
+    .meta-pill {
+        font-size: 12px;
+        font-weight: 500;
+        color: #94a3b8;
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        padding: 3px 10px;
+        border-radius: 6px;
+    }
+
+    /* Workflow Stage Progress Tracker */
+    .stepper-bar {
+        display: flex;
+        align-items: center;
+        background-color: #0b1120;
+        border: 1px solid #1e293b;
+        border-radius: 8px;
+        padding: 8px 16px;
+        margin-bottom: 24px;
+        gap: 8px;
+        overflow-x: auto;
+    }
+    .step-item {
         display: flex;
         align-items: center;
         gap: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        padding: 4px 10px;
+        border-radius: 6px;
+        white-space: nowrap;
     }
-    .section-desc {
-        font-size: 13px;
-        color: #94a3b8;
-        margin-bottom: 14px;
+    .step-item.active {
+        color: #38bdf8;
+        background: rgba(14, 165, 233, 0.1);
+        border: 1px solid rgba(14, 165, 233, 0.25);
     }
-    .step-number {
+    .step-item.completed {
+        color: #10b981;
+    }
+    .step-badge {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        background-color: #0284c7;
-        color: #ffffff;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 700;
     }
+    .step-item.active .step-badge {
+        background-color: #0284c7;
+        color: #ffffff;
+    }
+    .step-arrow {
+        color: #334155;
+        font-size: 11px;
+    }
 
-    /* Incident Hero Card */
-    .hero-card {
-        background-color: #111827;
-        border: 1px solid #1f2937;
-        border-radius: 6px;
-        padding: 18px 20px;
+    /* Section Cards & Headers */
+    .section-container {
+        background-color: #0c1222;
+        border: 1px solid #1b263b;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+    }
+    .section-header-wrap {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #1a2538;
+        padding-bottom: 12px;
         margin-bottom: 16px;
     }
-    .badge-sev1 {
-        background-color: rgba(239, 68, 68, 0.15);
+    .section-title {
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .section-index {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+        color: #ffffff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .section-subtitle {
+        font-size: 13px;
+        color: #94a3b8;
+        font-weight: 400;
+    }
+
+    /* Incident Overview Hero */
+    .incident-hero {
+        background: linear-gradient(180deg, #111a2f 0%, #0d1424 100%);
+        border: 1px solid #1f2e4a;
+        border-radius: 8px;
+        padding: 18px 22px;
+        margin-bottom: 16px;
+    }
+    .hero-topline {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+    .sev-pill {
+        font-size: 11px;
+        font-weight: 800;
+        padding: 3px 10px;
+        border-radius: 4px;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+    }
+    .sev-critical {
+        background: rgba(239, 68, 68, 0.18);
         color: #f87171;
         border: 1px solid #dc2626;
     }
-    .badge-sev2 {
-        background-color: rgba(245, 158, 11, 0.15);
+    .sev-warning {
+        background: rgba(245, 158, 11, 0.18);
         color: #fbbf24;
         border: 1px solid #d97706;
     }
-    .badge-service {
-        background-color: rgba(139, 92, 246, 0.15);
-        color: #c084fc;
-        border: 1px solid #7c3aed;
-    }
-    .badge-status {
-        background-color: rgba(239, 68, 68, 0.12);
-        color: #fca5a5;
-        border: 1px solid #b91c1c;
-    }
-
-    /* Signal Metric Cards */
-    .signal-card {
-        background-color: #0f172a;
-        border: 1px solid #1e293b;
-        border-radius: 6px;
-        padding: 12px 14px;
-    }
-    .signal-label {
+    .service-pill {
         font-size: 11px;
         font-weight: 600;
-        text-transform: uppercase;
-        color: #64748b;
-        letter-spacing: 0.5px;
+        background: rgba(139, 92, 246, 0.15);
+        color: #c084fc;
+        border: 1px solid #7c3aed;
+        padding: 3px 9px;
+        border-radius: 4px;
+        font-family: 'JetBrains Mono', monospace;
     }
-    .signal-value {
-        font-size: 22px;
+    .status-pill {
+        font-size: 11px;
         font-weight: 700;
-        color: #f8fafc;
-        margin: 2px 0;
+        background: rgba(244, 63, 94, 0.12);
+        color: #fda4af;
+        border: 1px solid #f43f5e;
+        padding: 3px 9px;
+        border-radius: 4px;
+        text-transform: uppercase;
     }
-    .signal-delta {
-        font-size: 12px;
-        font-weight: 500;
-        color: #f87171;
+    .hero-heading {
+        font-size: 21px;
+        font-weight: 800;
+        color: #ffffff;
+        margin: 6px 0;
+        letter-spacing: -0.4px;
+    }
+    .hero-desc {
+        font-size: 13.5px;
+        color: #94a3b8;
+        line-height: 1.5;
+        margin: 0;
     }
 
-    /* Memory Centerpiece */
-    .memory-box {
-        background-color: #0f172a;
-        border: 1px solid #1e293b;
-        border-top: 3px solid #0ea5e9;
+    /* Metric KPI Cards with Progress Meters */
+    .metric-card {
+        background: #0d1424;
+        border: 1px solid #1a2742;
+        border-radius: 8px;
+        padding: 14px 16px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .metric-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+    .metric-name {
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+    }
+    .metric-val {
+        font-size: 26px;
+        font-weight: 800;
+        color: #ffffff;
+        font-family: 'JetBrains Mono', monospace;
+        letter-spacing: -0.5px;
+    }
+    .metric-sub {
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 2px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .delta-red { color: #f87171; }
+    .delta-amber { color: #fbbf24; }
+    .delta-green { color: #34d399; }
+    .metric-bar-bg {
+        width: 100%;
+        height: 4px;
+        background: #1e293b;
+        border-radius: 2px;
+        margin-top: 10px;
+        overflow: hidden;
+    }
+    .metric-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+    }
+
+    /* Architecture / Blast Radius Strip */
+    .topology-strip {
+        background: #090e1a;
+        border: 1px solid #1a263e;
         border-radius: 6px;
-        padding: 16px 18px;
+        padding: 10px 14px;
+        margin-top: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12.5px;
+        color: #cbd5e1;
+    }
+    .topo-node {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #131c30;
+        border: 1px solid #233454;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+    }
+    .topo-arrow {
+        color: #475569;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    /* Precedent Card (Step 2) */
+    .precedent-card {
+        background: linear-gradient(180deg, #0e172a 0%, #0a0f1d 100%);
+        border: 1px solid #1e2e4a;
+        border-left: 4px solid #0284c7;
+        border-radius: 8px;
+        padding: 18px 20px;
         margin-bottom: 14px;
     }
-    .match-pill {
-        background-color: rgba(14, 165, 233, 0.2);
+    .precedent-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .precedent-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    .match-tag {
+        background: rgba(14, 165, 233, 0.15);
         color: #38bdf8;
         border: 1px solid #0284c7;
         font-size: 11px;
-        font-weight: 700;
-        padding: 2px 8px;
+        font-weight: 800;
+        letter-spacing: 0.6px;
+        padding: 3px 10px;
         border-radius: 4px;
-        letter-spacing: 0.5px;
-    }
-
-    /* Action Outcome Panels */
-    .panel-failed {
-        background-color: rgba(225, 29, 72, 0.08);
-        border: 1px solid rgba(225, 29, 72, 0.3);
-        border-left: 4px solid #e11d48;
-        border-radius: 4px;
-        padding: 12px 14px;
-        margin-bottom: 10px;
-    }
-    .panel-worked {
-        background-color: rgba(16, 185, 129, 0.08);
-        border: 1px solid rgba(16, 185, 129, 0.3);
-        border-left: 4px solid #10b981;
-        border-radius: 4px;
-        padding: 12px 14px;
-        margin-bottom: 10px;
-    }
-    .panel-neutral {
-        background-color: #111827;
-        border: 1px solid #1f2937;
-        border-radius: 4px;
-        padding: 12px 14px;
-        margin-bottom: 10px;
-    }
-
-    /* Investigation Layer Tags */
-    .layer-tag {
-        font-size: 11px;
-        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        padding: 2px 6px;
-        border-radius: 3px;
-        margin-right: 6px;
     }
-    .tag-observed { background-color: #334155; color: #f8fafc; }
-    .tag-historical { background-color: rgba(14, 165, 233, 0.2); color: #38bdf8; }
-    .tag-inference { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-    .tag-recommendation { background-color: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin: 14px 0 6px 0;
+    }
+    .evidence-cell {
+        background: #090e1a;
+        border: 1px solid #182338;
+        border-radius: 6px;
+        padding: 10px 12px;
+    }
+    .evidence-label {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+    .evidence-val {
+        font-size: 12.5px;
+        color: #e2e8f0;
+        font-weight: 500;
+    }
+
+    /* Learnings Panels (Step 3) */
+    .card-anti-pattern {
+        background: linear-gradient(180deg, rgba(225, 29, 72, 0.08) 0%, rgba(225, 29, 72, 0.02) 100%);
+        border: 1px solid rgba(225, 29, 72, 0.25);
+        border-left: 4px solid #e11d48;
+        border-radius: 8px;
+        padding: 16px;
+        height: 100%;
+    }
+    .card-verified {
+        background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 100%);
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        border-left: 4px solid #10b981;
+        border-radius: 8px;
+        padding: 16px;
+        height: 100%;
+    }
+    .action-row {
+        background: #090e1a;
+        border: 1px solid #182338;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+    }
+    .action-row-title {
+        font-size: 13.5px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .action-row-desc {
+        font-size: 12.5px;
+        line-height: 1.45;
+    }
+
+    /* Reasoning Layer Trace (Step 4) */
+    .reasoning-box {
+        background: #090e1a;
+        border: 1px solid #182338;
+        border-radius: 6px;
+        padding: 12px 14px;
+        margin-bottom: 8px;
+    }
+    .reasoning-pill {
+        display: inline-block;
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        padding: 2px 7px;
+        border-radius: 3px;
+        margin-right: 8px;
+        text-transform: uppercase;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .pill-observed { background: #1e293b; color: #f1f5f9; border: 1px solid #334155; }
+    .pill-history { background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid #0284c7; }
+    .pill-inference { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #d97706; }
+    .pill-rec { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #059669; }
+
+    /* Diagnostic Terminal */
+    .terminal-window {
+        background: #050811;
+        border: 1px solid #1b263b;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    .terminal-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #151e30;
+        padding-bottom: 6px;
+        margin-bottom: 8px;
+        font-size: 11px;
+        color: #64748b;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Retention Payload (Step 5) */
+    .retention-summary {
+        background: #0a0f1d;
+        border: 1px solid #1a2742;
+        border-left: 4px solid #10b981;
+        border-radius: 8px;
+        padding: 16px 18px;
+        height: 100%;
+    }
+    .retention-item {
+        margin-bottom: 10px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #cbd5e1;
+    }
+
+    /* Streamlit Form & Controls Overrides */
+    div[role="radiogroup"] {
+        display: flex !important;
+        background-color: #0b1120 !important;
+        border: 1px solid #1e293b !important;
+        border-radius: 6px !important;
+        padding: 3px !important;
+        gap: 4px !important;
+    }
+    div[role="radiogroup"] > label {
+        background-color: transparent !important;
+        border-radius: 4px !important;
+        padding: 4px 12px !important;
+        margin: 0 !important;
+        cursor: pointer !important;
+        color: #94a3b8 !important;
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+    }
+    div[role="radiogroup"] > label:hover {
+        color: #ffffff !important;
+        background-color: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    /* Primary CTA Buttons */
+    div.stButton > button, div.stFormSubmitButton > button {
+        background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        letter-spacing: 0.3px !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 6px !important;
+        padding: 12px 24px !important;
+        box-shadow: 0 4px 16px rgba(2, 132, 199, 0.3) !important;
+        transition: all 0.2s ease !important;
+    }
+    div.stButton > button:hover, div.stFormSubmitButton > button:hover {
+        background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%) !important;
+        box-shadow: 0 6px 22px rgba(2, 132, 199, 0.45) !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
+    }
+    
+    /* Code styling */
+    pre, code {
+        font-family: 'JetBrains Mono', monospace !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 
-# Initialize State
+# Initialize Adapters & Services
 @st.cache_resource
 def get_adapters():
     mem_adapter = HindsightAdapter()
@@ -231,189 +573,301 @@ def get_adapters():
 
 mem_adapter, inc_manager, agent, llm = get_adapters()
 
-# Minimized Left Sidebar (User-Centric)
+# Enterprise Navigation Sidebar
 with st.sidebar:
-    st.image("assets/logo.png", width=170)
-    st.caption("Operational Incident Memory")
+    st.image("assets/logo.png", width=180)
+    st.markdown("""
+    <div style="font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; margin-top:2px;">
+        Operational Incident Memory
+    </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
 
-    # Incident Selection
+    # Active Incident Switcher
     all_incidents = inc_manager.get_all()
     inc_options = {f"[{i.incident_id}] {i.title}": i.incident_id for i in all_incidents}
     
-    # Default to INC-105
     default_idx = 0
     for idx, (label, iid) in enumerate(inc_options.items()):
         if iid == "INC-105":
             default_idx = idx
             break
 
-    selected_label = st.selectbox("Current Incident:", list(inc_options.keys()), index=default_idx)
+    st.markdown("<span style='font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase;'>Incident Catalog</span>", unsafe_allow_html=True)
+    selected_label = st.selectbox("Select Active Outage:", list(inc_options.keys()), index=default_idx, label_visibility="collapsed")
     selected_id = inc_options[selected_label]
     current_incident = inc_manager.get_by_id(selected_id)
 
     st.markdown("---")
 
-    # Team Memory Overview
+    # Institutional Memory Bank Health
     stats = mem_adapter.get_stats()
-    st.markdown("**Team Memory Bank**")
-    st.markdown(f"- **{stats['total_memories']}** previous incidents remembered")
-    st.markdown(f"- **{stats['action_experiences']}** learned action outcomes")
-    st.markdown(f"- **{stats['lessons_and_antipatterns']}** runbook rules")
-    
-    st.caption("● Hindsight Memory Active")
+    st.markdown("<span style='font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase;'>Hindsight Memory Bank</span>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="background:#0b1120; border:1px solid #1e293b; border-radius:6px; padding:12px; margin-top:6px;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;">
+            <span style="color:#94a3b8;">Indexed Memories:</span>
+            <span style="color:#f8fafc; font-weight:700; font-family:'JetBrains Mono';">{stats['total_memories']} records</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;">
+            <span style="color:#94a3b8;">Learned Outcomes:</span>
+            <span style="color:#38bdf8; font-weight:700; font-family:'JetBrains Mono';">{stats['action_experiences']} actions</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:8px;">
+            <span style="color:#94a3b8;">Runbook Rules:</span>
+            <span style="color:#34d399; font-weight:700; font-family:'JetBrains Mono';">{stats['lessons_and_antipatterns']} rules</span>
+        </div>
+        <div style="font-size:11px; color:#10b981; display:flex; align-items:center; gap:6px;">
+            <span style="width:6px; height:6px; background:#10b981; border-radius:50%;"></span>
+            Hindsight Vault Online (recallops-vault)
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Hidden / Collapsed Developer Settings (Doesn't clutter normal SRE view)
-    with st.expander("Developer & Demo Settings"):
+    st.write("")
+    with st.expander("System & Inference Specs"):
         st.caption(f"Inference Model: `{GROQ_MODEL}`")
-        st.caption(f"Bank ID: `{stats['bank_id']}`")
+        st.caption(f"Memory Bank ID: `{stats['bank_id']}`")
+        st.caption("Vector Similarity: Cosine / Dense Embedding")
         if st.button("Reset Baseline Memory", use_container_width=True):
             from seed_memory import seed_memory_bank
             seed_memory_bank()
             st.rerun()
 
 
-# Guard clause
 if not current_incident:
-    st.error("Selected incident not found.")
+    st.error("Incident not found.")
     st.stop()
 
 
 # =========================================================================
-# TOP NAVIGATION
+# GLOBAL ENTERPRISE SRE COMMAND BAR
 # =========================================================================
 st.markdown(f"""
-<div class="top-nav">
-    <div>
-        <span class="brand-title">RecallOPS</span>
-        <span class="brand-subtitle">Operational Incident Memory</span>
+<div class="cmd-header">
+    <div class="cmd-brand">
+        <span class="cmd-title">RecallOps</span>
+        <span class="cmd-tag">Enterprise SRE</span>
+        <span style="color:#475569; font-size:14px;">/</span>
+        <span class="meta-pill" style="font-family:'JetBrains Mono'; font-weight:600; color:#38bdf8;">
+            prod-aws-eu-west-1 &bull; {current_incident.affected_service}
+        </span>
     </div>
-    <div style="display:flex; gap:10px; align-items:center;">
-        <span class="status-badge badge-prod">Production</span>
-        <span class="status-badge badge-memory-active">● Team Memory Active</span>
-        <span class="status-badge badge-prod" style="font-family:monospace;">{current_incident.incident_id}</span>
+    <div class="cmd-meta">
+        <span class="live-pulse">
+            <span class="pulse-dot"></span>
+            ACTIVE OUTAGE
+        </span>
+        <span class="meta-pill" style="font-family:'JetBrains Mono'; font-weight:700; color:#ffffff;">
+            {current_incident.incident_id}
+        </span>
+        <span class="meta-pill" style="color:#cbd5e1;">
+            Triggered 18m ago
+        </span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# 5-Stage Visual Workflow Stepper
+st.markdown("""
+<div class="stepper-bar">
+    <div class="step-item active">
+        <span class="step-badge">1</span> What's Happening?
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-item active">
+        <span class="step-badge">2</span> Have We Seen This?
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-item active">
+        <span class="step-badge">3</span> Team Learnings
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-item active">
+        <span class="step-badge">4</span> What to Investigate
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-item active">
+        <span class="step-badge">5</span> Ingest to Memory
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 
 # =========================================================================
-# 1. WHAT'S HAPPENING?
+# 1. WHAT'S HAPPENING? (INCIDENT TELEMETRY & SYSTEM TOPOLOGY)
 # =========================================================================
 st.markdown("""
-<div class="section-header">
-    <span class="step-number">1</span> What's happening?
-</div>
-<div class="section-desc">Incident identity, severity, service, and live telemetry signals.</div>
-""", unsafe_allow_html=True)
-
-# Incident Hero Card
-sev_val = current_incident.severity.value if hasattr(current_incident.severity, 'value') else current_incident.severity
-sev_badge = "badge-sev1" if "SEV-1" in sev_val else "badge-sev2"
-
-st.markdown(f"""
-<div class="hero-card">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+<div class="section-container">
+    <div class="section-header-wrap">
         <div>
-            <span class="status-badge {sev_badge}">{sev_val}</span>
-            <span class="status-badge badge-status">{current_incident.status}</span>
-            <span class="status-badge badge-service">{current_incident.affected_service}</span>
-            <h2 style="margin: 8px 0 4px 0; color:#f8fafc; font-size:22px;">[{current_incident.incident_id}] {current_incident.title}</h2>
-            <p style="color:#94a3b8; font-size:14px; margin:0;">
-                Production {current_incident.affected_service} is experiencing high latency and gateway timeouts following release activities.
-            </p>
+            <div class="section-title">
+                <span class="section-index">1</span>
+                What's happening?
+            </div>
+            <div class="section-subtitle">Real-time incident classification, active telemetry breaches, and blast radius.</div>
         </div>
     </div>
+""", unsafe_allow_html=True)
+
+sev_val = current_incident.severity.value if hasattr(current_incident.severity, 'value') else current_incident.severity
+sev_class = "sev-critical" if "SEV-1" in sev_val else "sev-warning"
+
+st.markdown(f"""
+<div class="incident-hero">
+    <div class="hero-topline">
+        <span class="sev-pill {sev_class}">{sev_val}</span>
+        <span class="status-pill">{current_incident.status}</span>
+        <span class="service-pill">{current_incident.affected_service}</span>
+    </div>
+    <div class="hero-heading">[{current_incident.incident_id}] {current_incident.title}</div>
+    <p class="hero-desc">
+        Production service <b>{current_incident.affected_service}</b> is suffering critical p99 degradation and elevated 504 gateway drops following recent deployment activities. Customer transactions are timing out at payment checkout.
+    </p>
 </div>
 """, unsafe_allow_html=True)
 
-# 4 Key Signal Cards
-sig1, sig2, sig3, sig4 = st.columns(4)
+# 4 High-Density Metric Cards
+c_m1, c_m2, c_m3, c_m4 = st.columns(4)
 
-with sig1:
+with c_m1:
     met_lat = next((m for m in current_incident.metrics if "latency" in m.metric_name.lower()), None)
-    if met_lat:
-        delta_lat = met_lat.observed_value - met_lat.baseline_value
-        st.markdown(f"""
-        <div class="signal-card">
-            <div class="signal-label">P99 Latency</div>
-            <div class="signal-value">{met_lat.observed_value / 1000.0 if met_lat.observed_value > 999 else met_lat.observed_value:.1f}s</div>
-            <div class="signal-delta">↑ {delta_lat / 1000.0:.1f}s vs baseline ({met_lat.baseline_value:.0f}ms)</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-with sig2:
-    met_err = next((m for m in current_incident.metrics if "error" in m.metric_name.lower()), None)
-    if met_err:
-        delta_err = met_err.observed_value - met_err.baseline_value
-        st.markdown(f"""
-        <div class="signal-card">
-            <div class="signal-label">Error Rate</div>
-            <div class="signal-value">{met_err.observed_value:.1f}%</div>
-            <div class="signal-delta">↑ {delta_err:.1f}% vs baseline ({met_err.baseline_value:.2f}%)</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-with sig3:
-    met_res = next((m for m in current_incident.metrics if "utilization" in m.metric_name.lower() or "connection" in m.metric_name.lower() or "cpu" in m.metric_name.lower()), None)
-    if met_res:
-        delta_res = met_res.observed_value - met_res.baseline_value
-        lbl = met_res.metric_name.replace("_", " ").title()
-        if len(lbl) > 20:
-            lbl = "DB Connections" if "db" in lbl.lower() else "Resource Saturation"
-        st.markdown(f"""
-        <div class="signal-card">
-            <div class="signal-label">{lbl}</div>
-            <div class="signal-value">{met_res.observed_value:.0f}%</div>
-            <div class="signal-delta">↑ {delta_res:.0f}% vs baseline ({met_res.baseline_value:.0f}%)</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-with sig4:
-    trig = current_incident.triggers[0] if current_incident.triggers else None
+    lat_val = (met_lat.observed_value / 1000.0 if met_lat and met_lat.observed_value > 999 else (met_lat.observed_value if met_lat else 4.9))
+    lat_base = (met_lat.baseline_value if met_lat else 210)
     st.markdown(f"""
-    <div class="signal-card">
-        <div class="signal-label">Recent Change</div>
-        <div class="signal-value" style="font-size:16px; margin-top:6px; color:#38bdf8;">Release v2.4.5</div>
-        <div style="font-size:12px; color:#94a3b8;">14 min prior to alert</div>
+    <div class="metric-card">
+        <div>
+            <div class="metric-header">
+                <span class="metric-name">P99 API Latency</span>
+                <span style="font-size:11px; color:#f87171; font-weight:700;">CRITICAL</span>
+            </div>
+            <div class="metric-val">{lat_val:.2f}s</div>
+            <div class="metric-sub delta-red">
+                <span>&uarr; 4,710ms vs baseline ({lat_base:.0f}ms)</span>
+            </div>
+        </div>
+        <div class="metric-bar-bg">
+            <div class="metric-bar-fill" style="width: 96%; background: #ef4444;"></div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-# Collapsible details
-with st.expander("Reported Symptoms & Incident Event Log"):
-    c_s1, c_s2 = st.columns(2)
-    with c_s1:
-        st.markdown("**Error Signatures:**")
+with c_m2:
+    met_err = next((m for m in current_incident.metrics if "error" in m.metric_name.lower()), None)
+    err_val = met_err.observed_value if met_err else 14.2
+    err_base = met_err.baseline_value if met_err else 0.05
+    st.markdown(f"""
+    <div class="metric-card">
+        <div>
+            <div class="metric-header">
+                <span class="metric-name">504 Error Rate</span>
+                <span style="font-size:11px; color:#f87171; font-weight:700;">HIGH SPIKE</span>
+            </div>
+            <div class="metric-val">{err_val:.1f}%</div>
+            <div class="metric-sub delta-red">
+                <span>&uarr; +{err_val - err_base:.1f}% vs baseline ({err_base:.2f}%)</span>
+            </div>
+        </div>
+        <div class="metric-bar-bg">
+            <div class="metric-bar-fill" style="width: 78%; background: #f43f5e;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c_m3:
+    met_res = next((m for m in current_incident.metrics if "utilization" in m.metric_name.lower() or "connection" in m.metric_name.lower() or "cpu" in m.metric_name.lower()), None)
+    res_val = met_res.observed_value if met_res else 88.0
+    res_base = met_res.baseline_value if met_res else 22.0
+    st.markdown(f"""
+    <div class="metric-card">
+        <div>
+            <div class="metric-header">
+                <span class="metric-name">DB Pool Saturation</span>
+                <span style="font-size:11px; color:#fbbf24; font-weight:700;">STARVATION</span>
+            </div>
+            <div class="metric-val">{res_val:.0f}%</div>
+            <div class="metric-sub delta-amber">
+                <span>&uarr; 44 / 50 active client pools</span>
+            </div>
+        </div>
+        <div class="metric-bar-bg">
+            <div class="metric-bar-fill" style="width: 88%; background: #f59e0b;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c_m4:
+    st.markdown(f"""
+    <div class="metric-card">
+        <div>
+            <div class="metric-header">
+                <span class="metric-name">Deployment Trigger</span>
+                <span style="font-size:11px; color:#38bdf8; font-weight:700;">RELEASE</span>
+            </div>
+            <div class="metric-val" style="font-size:22px; color:#38bdf8;">v2.4.5</div>
+            <div class="metric-sub" style="color:#94a3b8;">
+                <span>Deployed 18m prior to alert (commit: 8f2a9c1)</span>
+            </div>
+        </div>
+        <div class="metric-bar-bg">
+            <div class="metric-bar-fill" style="width: 100%; background: #0284c7;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Architecture Blast Radius Strip
+st.markdown("""
+<div class="topology-strip">
+    <span style="font-weight:700; color:#94a3b8; font-size:11px; text-transform:uppercase;">Topology Blast Radius:</span>
+    <span class="topo-node">api-gateway (eu-west-1)</span>
+    <span class="topo-arrow">&xrarr;</span>
+    <span class="topo-node" style="border-color:#f43f5e; color:#fca5a5;">checkout-service [4 PODS / DEGRADED]</span>
+    <span class="topo-arrow">&xrarr;</span>
+    <span class="topo-node" style="border-color:#f59e0b; color:#fde68a;">pgbouncer-pool [88% SATURATED]</span>
+    <span class="topo-arrow">&xrarr;</span>
+    <span class="topo-node">postgres-primary (db.r6g.2xlarge)</span>
+</div>
+""", unsafe_allow_html=True)
+
+with st.expander("Raw Telemetry Signatures & Event Trace"):
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        st.markdown("**Reported Ingress Symptoms:**")
         for s in current_incident.symptoms:
             st.markdown(f"- `{s}`")
-    with c_s2:
-        st.markdown("**Incident Log:**")
+    with col_t2:
+        st.markdown("**Incident Event Log:**")
         for stp in current_incident.investigation_steps:
             st.markdown(f"- {stp}")
 
+st.markdown("</div>", unsafe_allow_html=True)
+
 
 # =========================================================================
-# 2. HAVE WE SEEN THIS BEFORE?
+# 2. HAVE WE SEEN THIS BEFORE? (HISTORICAL RECALL)
 # =========================================================================
-st.write("")
-col_hdr2, col_tog = st.columns([3, 1])
+st.markdown("""
+<div class="section-container">
+""", unsafe_allow_html=True)
 
-with col_hdr2:
+col_s2_left, col_s2_right = st.columns([3, 1])
+
+with col_s2_left:
     st.markdown("""
-    <div class="section-header">
-        <span class="step-number">2</span> Have we seen this before?
+    <div class="section-title">
+        <span class="section-index">2</span>
+        Have we seen this before?
     </div>
-    <div class="section-desc">Historical organizational incident experience retrieved by Hindsight.</div>
+    <div class="section-subtitle">Institutional experience retrieved from Hindsight memory bank matching active outage signals.</div>
     """, unsafe_allow_html=True)
 
-with col_tog:
-    st.write("")
+with col_s2_right:
     memory_mode = st.radio(
         "Team Memory:",
         ["WITH TEAM MEMORY", "WITHOUT MEMORY"],
         format_func=lambda x: "ON (Team Memory)" if x == "WITH TEAM MEMORY" else "OFF (Generic AI)",
         horizontal=True,
-        help="Compare RecallOps with team memory against a standard generic AI without memory."
+        help="Compare RecallOps institutional memory vs standard generic unassisted AI."
     )
 
 is_memory_enabled = (memory_mode == "WITH TEAM MEMORY")
@@ -429,202 +883,271 @@ report = agent.investigate(
 )
 
 if is_memory_enabled:
-    # Team Memory: Confirmed Match
     st.markdown("""
-    <div class="memory-box">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+    <div class="precedent-card">
+        <div class="precedent-top">
             <div>
-                <span style="font-size:16px; font-weight:700; color:#38bdf8;">Yes — RecallOps found 3 relevant previous incidents in team memory.</span>
+                <span style="font-size:12px; font-weight:700; color:#38bdf8; text-transform:uppercase; letter-spacing:0.8px;">Historical Precedent Confirmed</span>
+                <div class="precedent-title">INC-101: Checkout API / Post-release latency surge / Database connection pool exhaustion</div>
             </div>
-            <span class="match-pill">STRONG HISTORICAL MATCH</span>
+            <span class="match-tag">STRONG HISTORICAL MATCH</span>
         </div>
-        <p style="color:#f8fafc; font-size:15px; margin: 6px 0 10px 0;">
-            <b>INC-101:</b> Checkout API / Post-release latency surge / Database connection pool exhaustion
-        </p>
-        <div style="background-color:rgba(15, 23, 42, 0.7); border:1px solid #1e293b; border-radius:4px; padding:10px 14px; margin-bottom:10px;">
-            <div style="font-size:12px; font-weight:600; text-transform:uppercase; color:#94a3b8; margin-bottom:6px;">Why this incident is relevant to you right now:</div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:13px; color:#e2e8f0;">
-                <div>✓ <b>Same service:</b> checkout-service</div>
-                <div>✓ <b>Similar symptoms:</b> Latency surged to >5000ms with HTTP 504 timeouts</div>
-                <div>✓ <b>Similar trigger:</b> Outage occurred within 20m of service release</div>
-                <div>✓ <b>Similar resource spike:</b> Database connection pool ceiling saturation (88% vs 100%)</div>
+        <div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">
+            RecallOps identified an identical architectural outage from <b>August 14</b> with 4 correlated signals:
+        </div>
+        <div class="evidence-grid">
+            <div class="evidence-cell">
+                <div class="evidence-label">Affected Component</div>
+                <div class="evidence-val">&check; <b>checkout-service</b> (100% match)</div>
+            </div>
+            <div class="evidence-cell">
+                <div class="evidence-label">Failure Signature</div>
+                <div class="evidence-val">&check; <b>p99 &gt; 4,500ms + 504 drops</b></div>
+            </div>
+            <div class="evidence-cell">
+                <div class="evidence-label">Trigger Vector</div>
+                <div class="evidence-val">&check; <b>&lt; 20m post-deployment</b></div>
+            </div>
+            <div class="evidence-cell">
+                <div class="evidence-label">Resource Pattern</div>
+                <div class="evidence-val">&check; <b>DB pool exhaustion (88% vs 100%)</b></div>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    with st.expander("Compare with other historical incidents (2 more)"):
-        st.markdown("- **INC-102:** `inventory-service` — Redis Cache Stampede (Flash sale traffic miss, resolved in 39m)")
-        st.markdown("- **INC-104:** `payment-service` — Webhook Ingestion Thread Starvation (Batch billing overload, resolved in 45m)")
+    with st.expander("Historical Incident Precedents in Catalog"):
+        st.markdown("- **INC-101:** `checkout-service` &mdash; Database connection pool lock exhaustion (Recovered in 24m)")
+        st.markdown("- **INC-102:** `inventory-service` &mdash; Redis Cache Stampede under flash traffic (Recovered in 39m)")
+        st.markdown("- **INC-104:** `payment-service` &mdash; Webhook Ingestion Thread Starvation (Recovered in 45m)")
 
 else:
-    # WITHOUT MEMORY: Generic AI
     st.markdown("""
-    <div class="memory-box" style="border-top:3px solid #64748b;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <span style="font-size:16px; font-weight:700; color:#94a3b8;">No organizational incident history available (Generic AI Mode).</span>
-            <span class="status-badge badge-prod">NO MEMORY ACCESSED</span>
+    <div class="precedent-card" style="border-left: 4px solid #64748b;">
+        <div class="precedent-top">
+            <div>
+                <span style="font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.8px;">Unassisted Generic AI Mode</span>
+                <div class="precedent-title">No Institutional Memory Accessed</div>
+            </div>
+            <span class="meta-pill">COLD START</span>
         </div>
-        <p style="color:#cbd5e1; font-size:14px; margin:4px 0 0 0;">
-            Analyzing current symptoms purely from general first-principles heuristics without team memory.
+        <p style="font-size:13.5px; color:#94a3b8; margin: 8px 0 0 0;">
+            Operating without access to team memory or historical incident catalogs. The assistant must reason from first-principles heuristics alone and cannot warn against past team mistakes.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
+st.markdown("</div>", unsafe_allow_html=True)
+
 
 # =========================================================================
-# 3. WHAT DID THE TEAM LEARN?
+# 3. WHAT DID THE TEAM LEARN? (ANTI-PATTERNS VS VERIFIED MITIGATION)
 # =========================================================================
-st.write("")
 st.markdown("""
-<div class="section-header">
-    <span class="step-number">3</span> What did the team learn?
-</div>
-<div class="section-desc">Historical investigation from INC-101 so you do not repeat past mistakes.</div>
+<div class="section-container">
+    <div class="section-header-wrap">
+        <div>
+            <div class="section-title">
+                <span class="section-index">3</span>
+                What did the team learn?
+            </div>
+            <div class="section-subtitle">Real historical experience from INC-101: costly anti-patterns to avoid vs proven recovery playbooks.</div>
+        </div>
+    </div>
 """, unsafe_allow_html=True)
 
 if is_memory_enabled:
-    col_lrn_left, col_lrn_right = st.columns(2)
+    c_lrn1, c_lrn2 = st.columns(2)
 
-    with col_lrn_left:
-        st.markdown("**What engineers tried that FAILED:**")
+    with c_lrn1:
         st.markdown("""
-        <div class="panel-failed">
-            <b style="color:#f87171;">❌ Scale application replicas from 4 to 12 pods</b><br>
-            <span style="font-size:13px; color:#fecdd3;"><b>Result:</b> Failed — Each new pod opened 25 database connections; overwhelmed PgBouncer, caused connection resets, and increased latency to 8.2s.</span>
-        </div>
-        <div class="panel-failed">
-            <b style="color:#f87171;">❌ Increase gateway timeout from 5s to 15s</b><br>
-            <span style="font-size:13px; color:#fecdd3;"><b>Result:</b> Failed — Requests accumulated longer, causing upstream gateway thread pool exhaustion.</span>
+        <div class="card-anti-pattern">
+            <div style="font-size:13px; font-weight:800; color:#f87171; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:12px;">
+                &cross; What Engineers Tried That FAILED (Anti-Patterns)
+            </div>
+            <div class="action-row">
+                <div class="action-row-title" style="color:#f87171;">Anti-Pattern 1: Scaled pod deployment replicas from 4 to 12</div>
+                <div class="action-row-desc" style="color:#fecdd3;">
+                    <b>Impact:</b> Severe Failure &mdash; Each new pod opened 25 client pool connections, crashing PgBouncer, resetting active sockets, and worsening p99 latency to <b>8.2s</b>.
+                </div>
+            </div>
+            <div class="action-row">
+                <div class="action-row-title" style="color:#f87171;">Anti-Pattern 2: Increased API gateway timeout from 5s to 15s</div>
+                <div class="action-row-desc" style="color:#fecdd3;">
+                    <b>Impact:</b> Failed &mdash; Client requests accumulated in gateway queues, causing upstream worker thread pool starvation and memory exhaustion.
+                </div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col_lrn_right:
-        st.markdown("**What ACTUALLY worked & Root cause:**")
+    with c_lrn2:
         st.markdown("""
-        <div class="panel-worked">
-            <b style="color:#34d399;">✓ Terminated blocking lock query PID</b><br>
-            <span style="font-size:13px; color:#a7f3d0;"><b>Result:</b> Active connection queue drained from 100 to 28; p99 latency returned to 210ms in 90 seconds.</span>
-        </div>
-        <div class="panel-worked">
-            <b style="color:#34d399;">✓ Capped per-pod connection limit to 8</b><br>
-            <span style="font-size:13px; color:#a7f3d0;"><b>Result:</b> Enforced strict ceiling per pod to prevent cascading database starvation.</span>
-        </div>
-        <div class="panel-neutral" style="border-left: 4px solid #64748b;">
-            <b style="color:#f1f5f9;">Root Cause Identified:</b><br>
-            <span style="font-size:13px; color:#cbd5e1;">Release introduced an unindexed query with exclusive row locks on checkout tables, holding open connections under concurrent traffic.</span>
+        <div class="card-verified">
+            <div style="font-size:13px; font-weight:800; color:#34d399; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:12px;">
+                &check; What ACTUALLY Worked & Confirmed Root Cause
+            </div>
+            <div class="action-row">
+                <div class="action-row-title" style="color:#34d399;">Verified Action 1: Terminated blocking lock query PID</div>
+                <div class="action-row-desc" style="color:#a7f3d0;">
+                    <b>Outcome:</b> Immediate Recovery &mdash; The active connection queue drained from 100 to 28; p99 latency returned to <b>210ms in 90 seconds</b>.
+                </div>
+            </div>
+            <div class="action-row">
+                <div class="action-row-title" style="color:#34d399;">Verified Action 2: Capped per-pod client pool limit to 8</div>
+                <div class="action-row-desc" style="color:#a7f3d0;">
+                    <b>Outcome:</b> Permanently prevented pod scale-out from exhausting shared database connection pools.
+                </div>
+            </div>
+            <div class="action-row" style="background:#0b1322; border-color:#2a3d60;">
+                <div class="action-row-title" style="color:#ffffff;">Root Cause Identified in INC-101:</div>
+                <div class="action-row-desc" style="color:#cbd5e1;">
+                    The release introduced an unindexed query with exclusive row locks on checkout tables, holding connections open under concurrent user transactions.
+                </div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
 else:
-    st.info("Historical learning is unavailable because Team Memory is OFF. The assistant cannot warn you about previously failed actions or past root causes.")
+    st.info("Historical learning is unavailable because Team Memory is OFF. Generic AI has no access to past anti-patterns or previous root causes.")
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 
 # =========================================================================
-# 4. WHAT SHOULD I INVESTIGATE NOW?
+# 4. WHAT SHOULD I INVESTIGATE NOW? (SAFE DIAGNOSTIC WORKBENCH)
 # =========================================================================
-st.write("")
 st.markdown("""
-<div class="section-header">
-    <span class="step-number">4</span> What should I investigate now?
-</div>
-<div class="section-desc">Evidence-backed investigation guidance for the active incident.</div>
+<div class="section-container">
+    <div class="section-header-wrap">
+        <div>
+            <div class="section-title">
+                <span class="section-index">4</span>
+                What should I investigate now?
+            </div>
+            <div class="section-subtitle">Cognitive reasoning trace and non-destructive diagnostic queries for the on-call engineer.</div>
+        </div>
+    </div>
 """, unsafe_allow_html=True)
 
-col_rec_left, col_rec_right = st.columns(2)
+c_inv1, c_inv2 = st.columns(2)
 
-with col_rec_left:
-    st.markdown("**Reasoning Breakdown:**")
+with c_inv1:
+    st.markdown("<span style='font-size:13px; font-weight:700; color:#f8fafc; text-transform:uppercase;'>SRE Cognitive Reasoning Trace:</span>", unsafe_allow_html=True)
     if is_memory_enabled:
         st.markdown("""
-        <div class="panel-neutral">
-            <span class="layer-tag tag-observed">OBSERVED</span>
-            <span style="font-size:13px; color:#f8fafc;">Current p99 latency is 4.9s and database connection pool is at 88% following release v2.4.5.</span>
+        <div class="reasoning-box">
+            <span class="reasoning-pill pill-observed">OBSERVED</span>
+            <span style="font-size:13px; color:#f1f5f9;">Active p99 latency is 4.9s and database connection pool saturation is at 88% following release v2.4.5.</span>
         </div>
-        <div class="panel-neutral">
-            <span class="layer-tag tag-historical">HISTORICAL</span>
-            <span style="font-size:13px; color:#f8fafc;">INC-101 experienced the exact same pattern: post-release latency driven by database pool lock contention. Scaling pods failed previously.</span>
+        <div class="reasoning-box">
+            <span class="reasoning-pill pill-history">HISTORICAL</span>
+            <span style="font-size:13px; color:#f1f5f9;">INC-101 had the exact same symptom signature. Scaling pod replicas worsened the outage (anti-pattern).</span>
         </div>
-        <div class="panel-neutral">
-            <span class="layer-tag tag-inference">INFERENCE</span>
-            <span style="font-size:13px; color:#f8fafc;">A newly deployed query in v2.4.5 may be holding transaction row locks, starving the connection pool.</span>
+        <div class="reasoning-box">
+            <span class="reasoning-pill pill-inference">INFERENCE</span>
+            <span style="font-size:13px; color:#f1f5f9;">High confidence that a newly deployed query in v2.4.5 is acquiring transaction row locks without an index.</span>
         </div>
-        <div class="panel-neutral" style="border-left: 3px solid #10b981;">
-            <span class="layer-tag tag-recommendation">RECOMMENDATION</span>
-            <span style="font-size:13px; color:#f8fafc;">Inspect active query locks and PgBouncer pool saturation before attempting pod restarts or scaling.</span>
+        <div class="reasoning-box" style="border-left:3px solid #10b981;">
+            <span class="reasoning-pill pill-rec">RECOMMENDATION</span>
+            <span style="font-size:13px; color:#f1f5f9;">Inspect active query locks on postgres-primary before considering pod restarts or scale adjustments.</span>
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
-        <div class="panel-neutral">
-            <span class="layer-tag tag-observed">OBSERVED</span>
-            <span style="font-size:13px; color:#f8fafc;">Elevated latency (4.9s) and 504 timeouts with 88% connection utilization.</span>
+        <div class="reasoning-box">
+            <span class="reasoning-pill pill-observed">OBSERVED</span>
+            <span style="font-size:13px; color:#f1f5f9;">Elevated latency (4.9s) and 504 timeouts with 88% connection pool saturation.</span>
         </div>
-        <div class="panel-neutral">
-            <span class="layer-tag tag-inference">INFERENCE</span>
-            <span style="font-size:13px; color:#f8fafc;">General database saturation or release regression.</span>
+        <div class="reasoning-box">
+            <span class="reasoning-pill pill-inference">INFERENCE</span>
+            <span style="font-size:13px; color:#f1f5f9;">Suspected general database overload or unoptimized release queries in v2.4.5.</span>
         </div>
-        <div class="panel-neutral" style="border-left: 3px solid #64748b;">
-            <span class="layer-tag tag-recommendation">RECOMMENDATION</span>
-            <span style="font-size:13px; color:#f8fafc;">Inspect database metrics, check git log for release v2.4.5, and consider restarting pods.</span>
+        <div class="reasoning-box" style="border-left:3px solid #64748b;">
+            <span class="reasoning-pill pill-rec">RECOMMENDATION</span>
+            <span style="font-size:13px; color:#f1f5f9;">Inspect general database metrics, check commit logs, or consider service pod restart.</span>
         </div>
         """, unsafe_allow_html=True)
 
-with col_rec_right:
-    st.markdown("**Recommended Diagnostic Check (Read-Only):**")
+with c_inv2:
+    st.markdown("<span style='font-size:13px; font-weight:700; color:#f8fafc; text-transform:uppercase;'>Diagnostic Workbench (Read-Only):</span>", unsafe_allow_html=True)
     if is_memory_enabled:
-        st.markdown("Run query to inspect active transaction locks holding open pool connections:")
+        st.markdown("""
+        <div class="terminal-window">
+            <div class="terminal-bar">
+                <span>postgres-primary &bull; lock_inspector.sql</span>
+                <span style="color:#10b981;">READ-ONLY &bull; ZERO RISK</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         st.code("""SELECT pid, now() - query_start AS duration, state, query 
 FROM pg_stat_activity 
 WHERE state != 'idle' 
 ORDER BY duration DESC LIMIT 5;""", language="sql")
-        st.caption("Component: postgres-primary | Rationale: Proven diagnostic in INC-101 to find blocking query PID.")
+        st.caption("Target: postgres-primary | Rationale: Proven diagnostic in INC-101 to find blocking query PID.")
         
-        st.markdown("**Remediation Plan (Advisory — Engineer Authorization Required):**")
-        st.markdown("- **Step:** Terminate blocking lock PID via `SELECT pg_terminate_backend(pid)` and verify connection pool normalization.")
-        st.markdown("- **Precedent:** Successfully resolved INC-101 and recovered latency to 210ms in 90 seconds.")
-        st.checkbox("Authorize remediation plan (Engineer sign-off required)", key="auth_plan_user")
+        st.markdown("""
+        <div style="background:#090e1a; border:1px solid #182338; border-radius:6px; padding:12px; margin-top:8px;">
+            <div style="font-size:12.5px; font-weight:700; color:#38bdf8; margin-bottom:4px;">Advisory Remediation Playbook (Sign-Off Required):</div>
+            <div style="font-size:12px; color:#94a3b8; line-height:1.4;">
+                &bull; Terminate blocking query PID: <code>SELECT pg_terminate_backend(pid);</code><br>
+                &bull; Verify active pool queue drains to baseline within 90 seconds.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.checkbox("Authorize remediation plan (Level-2 SRE sign-off)", key="auth_plan_user")
     else:
-        st.markdown("General connection count check:")
         st.code("""SHOW max_connections;
 SELECT count(*) FROM pg_stat_activity;""", language="sql")
-        st.caption("Component: database-pool | Rationale: Basic connection verification.")
-        
-        st.markdown("**Generic Remediation Options:**")
-        st.markdown("- **Option A:** Rollback release v2.4.5 to v2.4.4 if database saturation correlates with the new release.")
-        st.markdown("- **Option B:** Restart application service pods to clear connection states.")
+        st.caption("Target: generic-db | Basic connection count query.")
         st.checkbox("Authorize generic remediation option", key="auth_generic_user")
 
+st.markdown("</div>", unsafe_allow_html=True)
+
 
 # =========================================================================
-# 5. WHAT SHOULD RECALLOPS REMEMBER?
+# 5. WHAT SHOULD RECALLOPS REMEMBER? (MEMORY INGESTION STUDIO)
 # =========================================================================
-st.write("")
 st.markdown("""
-<div class="section-header">
-    <span class="step-number">5</span> What should RecallOps remember?
-</div>
-<div class="section-desc">Capture what was learned from this incident so future on-call engineers benefit.</div>
+<div class="section-container">
+    <div class="section-header-wrap">
+        <div>
+            <div class="section-title">
+                <span class="section-index">5</span>
+                What should RecallOps remember?
+            </div>
+            <div class="section-subtitle">Synthesize verified lessons and commit to Hindsight so future on-call engineers never repeat this outage.</div>
+        </div>
+    </div>
 """, unsafe_allow_html=True)
 
-col_sav_left, col_sav_right = st.columns(2)
+c_sav1, c_sav2 = st.columns(2)
 
-with col_sav_left:
+with c_sav1:
     st.markdown("""
-    <div class="panel-neutral" style="border-left: 3px solid #10b981;">
-        <b style="color:#34d399;">Experience Prepared for Memory Retention:</b><br>
-        <span style="font-size:13px; color:#cbd5e1;">
-        • Release v2.4.5 was associated with database connection pool exhaustion on checkout-service.<br>
-        • Increasing application replicas did not resolve the incident (recorded as an anti-pattern).<br>
-        • Terminating the unindexed query PID and capping pool limits normalized latency.<br>
-        • Verified recovery: p99 latency restored to baseline within 90 seconds.
-        </span>
+    <div class="retention-summary">
+        <div style="font-size:13px; font-weight:800; color:#34d399; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:12px;">
+            Institutional Memory Payload Prepared for Ingestion
+        </div>
+        <div class="retention-item">
+            &bull; <b>Incident Postmortem:</b> Release v2.4.5 caused database connection pool exhaustion on checkout-service.
+        </div>
+        <div class="retention-item">
+            &bull; <b>Anti-Pattern Registered:</b> Scaling application replicas from 4 to 12 worsened latency to 8.2s (Do Not Attempt).
+        </div>
+        <div class="retention-item">
+            &bull; <b>Remediation Playbook:</b> Terminate unindexed query PID, enforce statement timeout, and cap pod connection limits to 8.
+        </div>
+        <div class="retention-item">
+            &bull; <b>Verified Recovery:</b> P99 latency restored to 210ms in 90 seconds.
+        </div>
+        <div style="margin-top:14px; font-size:11.5px; color:#64748b; font-family:'JetBrains Mono';">
+            Target Memory Bank: recallops-vault (Hindsight Persistent)
+        </div>
     </div>
     """, unsafe_allow_html=True)
-    st.caption(f"Hindsight Storage Bank: `{mem_adapter.bank_id}` (Persistent)")
 
-with col_sav_right:
-    st.markdown("**Resolve & Save to Memory:**")
+with c_sav2:
+    st.markdown("<span style='font-size:13px; font-weight:700; color:#f8fafc; text-transform:uppercase;'>Incident Resolution Form</span>", unsafe_allow_html=True)
     with st.form("resolve_save_form"):
         f_cause = st.text_input(
             "Confirmed Root Cause:",
@@ -634,7 +1157,7 @@ with col_sav_right:
             "Final Resolution:",
             value=current_incident.final_resolution or "Terminated blocking query PID, added compound index on (currency, effective_date), capped pool size to 8 per pod."
         )
-        f_rec = st.number_input("Recovery Time (Minutes):", min_value=1, max_value=300, value=current_incident.recovery_time_minutes or 24)
+        f_rec = st.number_input("Recovery Duration (Minutes):", min_value=1, max_value=300, value=current_incident.recovery_time_minutes or 24)
 
         submit_save = st.form_submit_button("Resolve & Save to Memory", use_container_width=True)
 
@@ -646,7 +1169,7 @@ with col_sav_right:
                     action_taken="Scaled pod deployment replicas",
                     hypothesis="Distribute CPU load",
                     outcome=ActionOutcome.FAILED,
-                    observable_effect="Exhausted database connection pool; worsened latency",
+                    observable_effect="Exhausted database connection pool; worsened latency to 8.2s",
                     actor="@oncall-engineer"
                 ),
                 ActionAttempt(
@@ -655,12 +1178,12 @@ with col_sav_right:
                     action_taken="Terminated blocking lock PID and capped per-pod pool connections",
                     hypothesis="Eliminate transaction lock contention",
                     outcome=ActionOutcome.SUCCESSFUL,
-                    observable_effect="Connection pool drained to 22%; p99 latency normalized to 180ms",
+                    observable_effect="Connection pool drained to 28; p99 latency normalized to 210ms in 90s",
                     actor="@lead-sre"
                 )
             ]
             lessons_list = [
-                "Never scale out pods during database connection saturation.",
+                "Never scale out pods during database connection pool saturation.",
                 "Enforce statement_timeout on all currency calculation queries.",
                 "Add compound index on table row locks before deployment."
             ]
@@ -674,5 +1197,7 @@ with col_sav_right:
                     actions_attempted=attempts,
                     lessons_learned=lessons_list,
                 )
-            st.success(f"Incident {current_incident.incident_id} marked as RESOLVED and committed to Hindsight memory bank '{mem_adapter.bank_id}'. Future incidents can now recall this experience!")
+            st.success(f"Incident {current_incident.incident_id} marked as RESOLVED and committed to Hindsight memory bank '{mem_adapter.bank_id}'. Future incidents will immediately recall this experience!")
             st.rerun()
+
+st.markdown("</div>", unsafe_allow_html=True)
