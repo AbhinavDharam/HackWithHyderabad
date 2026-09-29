@@ -6,9 +6,18 @@ import os
 import streamlit as st
 import json
 import time
+import base64
+from pathlib import Path
 from datetime import datetime, timezone
 import pandas as pd
 import numpy as np
+
+# Load authentic app logo from assets/logo.png
+_logo_file = Path(__file__).parent / "assets" / "logo.png"
+_logo_b64 = ""
+if _logo_file.exists():
+    with open(_logo_file, "rb") as f:
+        _logo_b64 = base64.b64encode(f.read()).decode("utf-8")
 
 from recallops.config import HINDSIGHT_BANK_ID, HINDSIGHT_BASE_URL, GROQ_MODEL, GEMINI_MODEL
 from recallops.models.incident import Incident, ActionAttempt, ActionOutcome, Severity, IncidentMetric, IncidentTrigger
@@ -588,15 +597,9 @@ if "remediation_executed" not in st.session_state:
 
 # Sidebar - High-Visibility Illuminated Logo + Brand Text + Navigation Tabs
 with st.sidebar:
-    st.markdown("""
+    st.markdown(f"""
     <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #162032;">
-        <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, #0284c7 0%, #6366f1 100%); display:flex; align-items:center; justify-content:center; box-shadow:0 0 16px rgba(56,189,248,0.45); border:1.5px solid rgba(255,255,255,0.25); flex-shrink:0;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a9 9 0 0 1 9 9c0 3.87-2.45 7.17-5.91 8.36L12 22l-3.09-2.64A9.002 9.002 0 0 1 3 11a9 9 0 0 1 9-9z"></path>
-                <circle cx="12" cy="10" r="3"></circle>
-                <path d="M12 13v4"></path>
-            </svg>
-        </div>
+        <img src="data:image/png;base64,{_logo_b64}" style="width:48px; height:48px; border-radius:12px; box-shadow:0 0 16px rgba(56,189,248,0.5); border:1.5px solid rgba(56,189,248,0.55); object-fit:contain; background:#040711; flex-shrink:0;" alt="RecallOps Logo" />
         <div>
             <div style="font-size:20px; font-weight:800; color:#ffffff; letter-spacing:-0.5px; line-height:1.15;">RecallOps</div>
             <div style="font-size:11px; font-weight:600; color:#38bdf8; letter-spacing:0.5px; text-transform:uppercase;">Incident Intelligence</div>
