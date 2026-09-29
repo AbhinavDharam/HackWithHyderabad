@@ -274,6 +274,13 @@ with st.sidebar:
         st.caption(f"Hindsight Endpoint: `{HINDSIGHT_BASE_URL}`")
         llm_ready = "Ready (Cloud)" if llm.is_live_llm_ready() else "Deterministic SRE Engine"
         st.caption(f"Inference Engine: **{llm_ready}**")
+        
+        if st.button("Run Model Ping Check", use_container_width=True):
+            import time
+            t0 = time.time()
+            test_resp = llm.generate("Ping test: confirm connection.")
+            dt = time.time() - t0
+            st.success(f"Response ({dt:.2f}s): {test_resp[:80]}...")
 
 
 # Guard clause
